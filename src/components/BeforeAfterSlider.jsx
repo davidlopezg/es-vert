@@ -1,11 +1,32 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-// Slider Antes/Después con pointer events.
-// Etiquetas ahora en Montserrat uppercase tracking (sin mono).
-// Fondo del contenedor: cream, para que la curva asimétrica se vea.
+// Slider Antes/Después con pointer events y feedback de estado de
+// generación de la imagen. Si la URL de la IA falla (rate-limit,
+// red, CORS), la <img> cae a `onError` y marcamos estado `error`
+// para mostrar un botón "Reintentar" sobre el chrome.
 
-export default function BeforeAfterSlider({ before, after, label = 'terraza', regenerating = false }) {
+function ImageLayer({ src, alt, side, onState }) {
+  return (
+    <img
+      src={src}
+      alt={alt}
+      draggable={false}
+      className="absolute inset-0 w-full h-full object-cover"
+      onLoad={() => onState(side, 'ok')}
+      onError={() => onState(side, 'error')}
+    />
+  );
+}
+
+export default function BeforeAfterSlider({
+  before,
+  after,
+  label = 'terraza',
+  regenerating = false,
+  onRetry,
+}) {
   const [position, setPosition] = useState(50);
+  const [imgState, setImgState] = useState({ before: 'loading', after: 'loading' });
   const ref = useRef(null);
   const dragging = useRef(false);
 
@@ -37,6 +58,16 @@ export default function BeforeAfterSlider({ before, after, label = 'terraza', re
 
   const insetRight = 100 - position;
 
+  // Reset estado cuando cambia la URL de la imagen.
+  useEffect(() => {
+    setImgState({ before: 'loading', after: 'loading' });
+  }, [before, after]);
+
+  const handleImgState = (side, state) =>
+    setImgState(prev => ({ ...prev, [side]: state }));
+
+  const afterFailed = imgState.after === 'error';
+
   return (
     <div
       ref={ref}
@@ -47,11 +78,11 @@ export default function BeforeAfterSlider({ before, after, label = 'terraza', re
       onPointerCancel={onPointerUp}
     >
       {/* Capa "después" */}
-      <img
+      <ImageLayer
         src={after}
         alt={`${label} · después`}
-        draggable={false}
-        className="absolute inset-0 w-full h-full object-cover"
+        side="after"
+        onState={handleImgState}
       />
 
       {/* Capa recortada "antes" */}
@@ -59,11 +90,11 @@ export default function BeforeAfterSlider({ before, after, label = 'terraza', re
         className="absolute inset-0 overflow-hidden"
         style={{ clipPath: `inset(0 ${insetRight}% 0 0)` }}
       >
-        <img
+        <ImageLayer
           src={before}
           alt={`${label} · antes`}
-          draggable={false}
-          className="absolute inset-0 w-full h-full object-cover"
+          side="before"
+          onState={handleImgState}
         />
       </div>
 
@@ -84,26 +115,41 @@ export default function BeforeAfterSlider({ before, after, label = 'terraza', re
 
       {/* Etiquetas */}
       <div className="absolute top-5 left-5 right-5 md:top-6 md:left-6 md:right-6 flex justify-between pointer-events-none">
-        <span className="font-sans text-[10px] uppercase tracking-[0.28em] bg-cream/95 text-ink px-3 py-1.5">
+        <span className="font-sans text-[10px] uppercase tracking-[0.3em] bg-cream/95 text-ink px-3 py-1.5">
           Antes
         </span>
-        <span className="font-sans text-[10px] uppercase tracking-[0.28em] bg-ink/90 text-cream px-3 py-1.5">
+        <span className="font-sans text-[10px] uppercase tracking-[0.3em] bg-ink/90 text-cream border border-paper px-3 py-1.5">
           Después
         </span>
       </div>
 
-      {/* Pie con metadatos */}
-      <div className="absolute bottom-5 left-5 right-5 md:bottom-6 md:left-6 md:right-6 flex flex-wrap justify-between gap-2 pointer-events-none">
+      {/* Pie con metadatos + estado de generación */}
+      <div className="absolute bottom-5 left-5 right-5 md:bottom-6 md:left-6 md:right-6 flex flex-wrap justify-between items-center gap-2 pointer-events-none">
         <span className="font-sans text-[10px] uppercase tracking-[0.22em] bg-cream/95 text-ink px-3 py-1.5">
           Terraza · 24 m² · orientación SO
         </span>
-        <span className={`font-sans text-[10px] uppercase tracking-[0.22em] px-3 py-1.5 ${
-          regenerating
-            ? 'bg-accent/95 text-cream'
-            : 'bg-cream/95 text-mute'
-        }`}>
-          {regenerating ? 'IA · regenerando…' : 'IA · render'}
-        </span>
+        <div className="flex items-center gap-2 pointer-events-auto">
+          {regenerating && (
+            <span className="font-sans text-[10px] uppercase tracking-[0.22em] bg-accent/95 text-cream px-3 py-1.5 flex items-center gap-2">
+              <span className="inline-block w-2 h-2 bg-cream rounded-full animate-pulse" />
+              IA · regenerando
+            </span>
+          )}
+          {!regenerating && afterFailed && onRetry && (
+            <button
+              type="button"
+              onClick={onRetry}
+              className="font-sans text-[10px] uppercase tracking-[0.22em] bg-cream text-ink border border-ink/40 px-3 py-1.5 hover:bg-ink hover:text-cream transition-colors"
+            >
+              ↻ Reintentar render
+            </button>
+          )}
+          {!regenerating && !afterFailed && (
+            <span className="font-sans text-[10px] uppercase tracking-[0.22em] bg-cream/95 text-mute px-3 py-1.5">
+              {afterFailed ? 'IA · sin conexión' : 'IA · render'}
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );

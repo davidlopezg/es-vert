@@ -3,9 +3,6 @@ import Receipt from './Receipt.jsx';
 import Prompt from './Prompt.jsx';
 import { IMAGES } from '../data/products.js';
 
-// Resultado: rejilla 70/30 sin curva (el radio se ha retirado).
-// Densidad: tapas más estrechas, sin aire vacío entre paneles.
-
 export default function Result({
   lines,
   onPrompt,
@@ -15,6 +12,7 @@ export default function Result({
   afterSrc,
   onReset,
   onReservar,
+  onRetryImage,
 }) {
   return (
     <section className="flex-1 grid grid-cols-1 md:grid-cols-10 min-h-0 border-t border-ink/10">
@@ -23,6 +21,7 @@ export default function Result({
           before={beforeSrc || IMAGES.before}
           after={afterSrc || IMAGES.after}
           regenerating={pending}
+          onRetry={onRetryImage}
         />
       </div>
 

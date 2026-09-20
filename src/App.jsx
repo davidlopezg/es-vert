@@ -186,6 +186,7 @@ export default function App() {
             afterSrc={afterSrc}
             onReset={goHome}
             onReservar={handleReservar}
+            onRetryImage={() => regenerateAfter(lines)}
           />
         )}
       </main>
