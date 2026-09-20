@@ -1,0 +1,16 @@
+node_modules
+dist
+.DS_Store
+.env
+.env.local
+.env.*.local
+*.log
+.vite
+.cache
+coverage
+.idea
+.vscode
+
+# Cloudflare Worker — los secretos NO van al repo.
+ai-proxy/wrangler.toml
+ai-proxy/.dev.vars

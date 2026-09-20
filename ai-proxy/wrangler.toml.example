@@ -1,0 +1,23 @@
+# Plantilla de despliegue local del Worker (opcional, vía wrangler CLI).
+# Lo más rápido es pegarlo en el editor web de Cloudflare (recomendado).
+
+name = "es-vert-ai-proxy"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+# ── Secretos (nunca en el repo; usar `wrangler secret put`) ──
+#   MINIMAX_API_KEY  → clave de MiniMax (https://platform.minimax.io)
+#   IMAGE_API_URL    → endpoint del proveedor de imagen (opcional)
+#   IMAGE_API_KEY    → clave del proveedor (opcional)
+#   AI_PROXY_TOKEN   → opcional: token compartido que debe enviar la app
+
+[vars]
+# Sin variables públicas por defecto.
+
+# Comandos:
+#   npx wrangler login
+#   npx wrangler secret put MINIMAX_API_KEY
+#   npx wrangler secret put IMAGE_API_URL
+#   npx wrangler secret put IMAGE_API_KEY
+#   npx wrangler secret put AI_PROXY_TOKEN     (opcional)
+#   npx wrangler deploy
