@@ -2,13 +2,12 @@
 // Adapter de generación de imagen · cadena con fallback garantizado.
 // =============================================================
 //   1. HuggingFace (si VITE_HUGGINGFACE_TOKEN + foto subida)
-//   2. Custom provider (Replicate / fal / Stability, si sus 3 vars)
-//   3. Pollinations (zero-config, sin signup). T2I. Hoy muy capado.
-//   4. Stock curado (picsum con seed) → ÚLTIMO RECURSO, nunca falla.
+//   2. Together.ai (si VITE_TOGETHER_API_KEY) — browser-direct, FLUX
+//   3. Custom provider (Replicate / fal / Stability, si sus 3 vars)
+//   4. Pollinations (zero-config, sin signup). T2I. Hoy muy capado.
+//   5. Stock curado (picsum con seed) → ÚLTIMO RECURSO, nunca falla.
 //
 // Esta función SIEMPRE devuelve un string utilizable como <img src>.
-// Si todo lo anterior falla, devuelve un stock de picsum con un seed
-// determinista basado en la fecha.
 
 const BASE_PROMPT = [
   'Photorealistic contemporary Mediterranean terrace redesign',
@@ -54,6 +53,46 @@ let lastSource = 'idle';
 
 export function getLastImageSource() {
   return lastSource;
+}
+
+// ---- 2) Together.ai (browser-direct, free $5 al registrarse) --------
+//    Crear cuenta + API key en https://api.together.xyz (10 s)
+//    Soporta CORS, así que funciona desde el navegador sin proxy.
+//    ⚠️ T2I: no condiciona sobre la foto del usuario, solo prompt.
+async function together(prompt, opts = {}) {
+  const env = import.meta.env || {};
+  const apiKey = env.VITE_TOGETHER_API_KEY;
+  const model  = env.VITE_TOGETHER_MODEL || 'black-forest-labs/FLUX.1-schnell-Free';
+  if (!apiKey) throw new Error('Together: VITE_TOGETHER_API_KEY no definido.');
+
+  const url = env.VITE_TOGETHER_BASE_URL || 'https://api.together.xyz/v1/images/generations';
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      prompt,
+      n: 1,
+      width:  opts.width  || 1024,
+      height: opts.height ||  768,
+      steps: 4,
+      response_format: 'url',
+    }),
+  });
+
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    throw new Error(`Together ${res.status}: ${txt.slice(0, 200)}`);
+  }
+
+  const data = await res.json();
+  // Together devuelve { data: [{ url: '...' }] }
+  const url2 = data?.data?.[0]?.url || data?.url || (Array.isArray(data?.data) ? data.data[0] : null);
+  return typeof url2 === 'string' ? url2 : (url2?.url || '');
 }
 
 // ---- 1) Hugging Face Inference (free tier) ----------------------------
@@ -206,6 +245,20 @@ export async function generateAfter(beforeDataUrl, opts = {}) {
     } catch (e) {
       const kind = isNetworkError(e) ? 'CORS/red' : e.message?.slice(0, 60) ?? 'error';
       console.warn(`[Es-Vert] HF (${kind}) — siguiente provider.`);
+    }
+  }
+
+  // 2) Together.ai — funciona desde el navegador (CORS-enabled),
+  //    T2I de calidad con FLUX. Si está configurada, va antes de
+  //    Pollinations y del custom. Sin foto del usuario, solo prompt.
+  if (env.VITE_TOGETHER_API_KEY) {
+    try {
+      const url = await together(prompt, opts);
+      lastSource = 'together';
+      return url;
+    } catch (e) {
+      const kind = isNetworkError(e) ? 'red' : e.message?.slice(0, 60) ?? 'error';
+      console.warn(`[Es-Vert] Together (${kind}) — siguiente provider.`);
     }
   }
 

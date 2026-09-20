@@ -111,6 +111,12 @@ export default function DiagnosticPill() {
               </span>
             </li>
             <li className="flex items-baseline justify-between gap-3">
+              <span className="font-sans text-[13px] text-mute">Imagen Together.ai</span>
+              <span className={`font-mono text-[11px] uppercase tracking-[0.18em] ${diag.together ? 'text-accent' : 'text-ink/40'}`}>
+                {diag.together ? 'ON' : 'off'}
+              </span>
+            </li>
+            <li className="flex items-baseline justify-between gap-3">
               <span className="font-sans text-[13px] text-mute">Imagen custom</span>
               <span className={`font-mono text-[11px] uppercase tracking-[0.18em] ${diag.customImage ? 'text-accent' : 'text-ink/40'}`}>
                 {diag.customImage ? 'ON' : 'off'}
@@ -134,14 +140,14 @@ export default function DiagnosticPill() {
             >
               {copied ? '✓ Copiado' : '⧉ Copiar estado'}
             </button>
-            {!diag.hf && !diag.customImage && (
+            {!diag.hf && !diag.together && !diag.customImage && (
               <a
-                href="https://huggingface.co/settings/tokens"
+                href="https://api.together.xyz/settings/api-keys"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="font-mono text-[11px] uppercase tracking-[0.22em] border border-ink/30 px-3 py-2 hover:bg-ink hover:text-cream transition-colors"
               >
-                ↗ Crear token HF
+                ↗ Crear API key Together
               </a>
             )}
           </div>

@@ -8,6 +8,7 @@ export function getDiagnostic() {
     ? 'proxy'
     : (env.VITE_MINIMAX_API_KEY ? 'direct' : 'mock');
   const hf          = !!env.VITE_HUGGINGFACE_TOKEN;
+  const together    = !!env.VITE_TOGETHER_API_KEY;
   const customImage = !!(
     env.VITE_IMAGE_API_URL &&
     env.VITE_IMAGE_API_KEY &&
@@ -15,15 +16,16 @@ export function getDiagnostic() {
   );
 
   // Estado resumido para el pill (4 chars máximo OK + 4 of OFF)
-  const hasAny = llm || hf || customImage;
+  const hasAny = llm || hf || together || customImage;
   return {
     isDev:        !!env.DEV,
     llm,
     llmMode,
     hf,
+    together,
     customImage,
     hasAny,
-    ok: hf || customImage,        // alguna imagen real cargada
+    ok: hf || together || customImage, // alguna imagen real cargada
   };
 }
 
@@ -32,6 +34,7 @@ export function diagnosticText(d = getDiagnostic()) {
     `Modo: ${d.isDev ? 'Dev local' : 'Producción'}`,
     `LLM: ${d.llm ? d.llmMode : 'mock'}`,
     `HF: ${d.hf ? 'ON' : 'off'}`,
+    `Together: ${d.together ? 'ON' : 'off'}`,
     `Custom: ${d.customImage ? 'ON' : 'off'}`,
   ].join(' · ');
 }
