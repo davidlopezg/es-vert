@@ -5,7 +5,29 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 //  - Recorte del "antes" con clip-path
 //  - Overlay de carga cuando pending es true
 //  - Banner de error visible cuando la API falla
-//  - Botón reintentar + enlace "Ver URL" cuando la <img> falla
+//  - Botón reintentar + Copiar al portapapeles (diagnóstico en móvil)
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard?.writeText(text);
+    return true;
+  } catch {
+    // Fallback para navegadores sin Clipboard API
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
 
 function ImageLayer({ src, alt, side, onState }) {
   return (
@@ -23,6 +45,26 @@ function ImageLayer({ src, alt, side, onState }) {
 function Spinner() {
   return (
     <div className="inline-block w-10 h-10 border-[2.5px] border-ink/15 border-t-ink rounded-full animate-spin" />
+  );
+}
+
+function CopyButton({ text }) {
+  const [copied, setCopied] = useState(false);
+  const onClick = async () => {
+    const ok = await copyText(text);
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="font-mono text-[11px] uppercase tracking-[0.22em] border border-cream/40 px-3 py-1.5 hover:bg-cream hover:text-ink transition-colors"
+    >
+      {copied ? '✓ Copiado' : '⧉ Copiar error'}
+    </button>
   );
 }
 
@@ -150,30 +192,36 @@ export default function BeforeAfterSlider({
       {/* Banner de error (visible siempre que haya error y no esté cargando) */}
       {!pending && error && (
         <div className="absolute top-0 left-0 right-0 z-30 bg-ink/95 text-cream backdrop-blur-sm">
-          <div className="px-4 md:px-6 py-3 flex flex-wrap items-center gap-3 text-[12px]">
-            <span className="font-mono text-[10px] uppercase tracking-[0.25em] text-cream/60">
-              Error
-            </span>
-            <span className="font-sans text-[12px] leading-snug flex-1 min-w-[12rem]">
+          <div className="px-4 md:px-6 py-3 flex flex-col gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-mono text-[10px] uppercase tracking-[0.25em] text-cream/60">
+                Error de generación
+              </span>
+              <code className="font-mono text-[10px] uppercase tracking-[0.18em] text-cream/45 truncate">
+                {error.length > 80 ? error.slice(0, 80) + '…' : error}
+              </code>
+            </div>
+            <p className="font-sans text-[13px] leading-snug">
               {error}
-            </span>
-            {onRetry && (
-              <button
-                type="button"
-                onClick={onRetry}
-                className="font-mono text-[11px] uppercase tracking-[0.22em] border border-cream/40 px-3 py-1 hover:bg-cream hover:text-ink transition-colors"
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {onRetry && (
+                <button
+                  type="button"
+                  onClick={onRetry}
+                  className="font-mono text-[11px] uppercase tracking-[0.22em] border border-cream/40 px-3 py-1.5 hover:bg-cream hover:text-ink transition-colors"
+                >
+                  ↻ Reintentar
+                </button>
+              )}
+              <CopyButton text={error} />
+              <a
+                href={typeof window !== 'undefined' ? `mailto:?subject=Es-Vert%20error&body=${encodeURIComponent(error)}` : '#'}
+                className="font-mono text-[11px] uppercase tracking-[0.22em] border border-cream/40 px-3 py-1.5 hover:bg-cream hover:text-ink transition-colors"
               >
-                ↻ Reintentar
-              </button>
-            )}
-            <a
-              href="/es-vert/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-mono text-[11px] uppercase tracking-[0.22em] text-cream/70 hover:text-cream underline underline-offset-2"
-            >
-              Diagnóstico (F12 → consola)
-            </a>
+                ✉ Enviar por email
+              </a>
+            </div>
           </div>
         </div>
       )}
