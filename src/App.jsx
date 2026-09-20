@@ -34,22 +34,35 @@ export default function App() {
       const dataUrl = e.target.result;
       setBeforeSrc(dataUrl);
       setStage('result');
-      if (IMG_CFG.enabled) {
-        try {
-          setPending(true);
-          const url = await generateAfter(dataUrl);
-          if (url) setAfterSrc(url);
-        } catch (err) {
-          console.warn('Image API falló:', err);
-        } finally {
-          setPending(false);
-        }
+      // Siempre intentamos regenerar el "después". El adapter elige
+      // provider (HF / custom / Pollinations) según lo que esté
+      // configurado en .env.local. Si todo falla, se mantiene el mock.
+      try {
+        setPending(true);
+        const url = await generateAfter(dataUrl);
+        if (url) setAfterSrc(url);
+      } catch (err) {
+        console.warn('Generación de "después" falló, se mantiene mock:', err);
+      } finally {
+        setPending(false);
       }
     };
     reader.readAsDataURL(file);
   }, []);
 
-  const handleDemo = useCallback(() => setStage('result'), []);
+  const handleDemo = useCallback(async () => {
+    // El demo dispara generación con el prompt curado (sin foto de origen).
+    setStage('result');
+    try {
+      setPending(true);
+      const url = await generateAfter(null);
+      if (url) setAfterSrc(url);
+    } catch (err) {
+      console.warn('Demo "después":', err);
+    } finally {
+      setPending(false);
+    }
+  }, []);
 
   // Mutadores del recibo (idénticos a v0.4.0)
   const addLine = (line) => setLines(curr => {
