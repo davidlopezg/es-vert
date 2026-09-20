@@ -63,11 +63,13 @@ export default function App() {
       llm: AI_CFG.enabled
         ? `${LLM_LABEL} · ${AI_CFG.mode}`
         : 'mock (sin VITE_MINIMAX_API_KEY ni VITE_AI_PROXY_URL)',
-      imageHF: env.VITE_HUGGINGFACE_TOKEN ? 'ON' : 'off',
+      imageHF:     env.VITE_HUGGINGFACE_TOKEN ? 'ON (router · SD 2.1 · img2img)' : 'off',
+      imageRepl:   env.VITE_REPLICATE_API_TOKEN ? 'ON (SDXL · img2img)' : 'off',
+      imageTogI2I: env.VITE_TOGETHER_API_KEY ? 'ON (SDXL · img2img)' : 'off',
       imageCustom:
         env.VITE_IMAGE_API_URL && env.VITE_IMAGE_API_KEY && env.VITE_IMAGE_MODEL
-          ? 'ON' : 'off',
-      imageDefault: 'Pollinations (1 cola por IP, tier anónimo)',
+          ? 'ON (img2img)' : 'off',
+      imageDemo:   env.VITE_TOGETHER_API_KEY ? 'Together T2I (demo, sin foto)' : 'Pollinations (1 cola por IP)',
     });
   }, []);
 
