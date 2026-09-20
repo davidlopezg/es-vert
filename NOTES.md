@@ -5,6 +5,34 @@ Se complementa con `CHANGELOG.md` (que solo lleva releases fechados).
 
 ---
 
+## 2025 · Vuelta al editorial bien hecho
+
+### Lo que el usuario mantuvo (no tocar)
+- **Resultado con slider y sidebar** funcionan y gustan tal cual: rejilla 70/30, curva asimétrica en el slider, prompt + recibo en panel derecho.
+- **Paleta** cream/ink/accent/taupe/mute es buena.
+
+### Lo que el usuario rechazó y rehacemos
+- **Tipografía plana**: una sola sans mata la personalidad. Vuelve la triada:
+  - Fraunces → titulares (voz editorial, la firma de V1).
+  - Inter → cuerpo y UI (sans de referencia).
+  - JetBrains Mono → SKUs y precios (dot-leaders y tabular nums).
+- **Dropzone como tarjeta**: se quita la rejilla 50/50. Hero monocolumna vertical, eyebrow → título → subtítulo (la frase del usuario) → dropzone con la curva asimétrica → colofón.
+- **Trust strip corporativo**: se sustituye por una sola línea de colofón en mono — `Estudio Es-Vert · Diseño 3D · Montaje profesional · Barcelona · Desde 2018`. Sin banner, sin SaaS.
+- **Header**: ya no compite con la composición. Una sola línea fina.
+- **Recibo sin voz**: vuelve el total grande en serif Fraunces con dot-leaders, y los nombres en Inter.
+
+### Decisiones que se toman aparte (no se preguntó porque era obvio)
+- Stagger de entrada en 4 bloques — CSS keyframes + clases utilitarias, sin librerías. `prefers-reduced-motion` respetado.
+- `focus-visible` con outline verde — accesibilidad arreglada.
+- Botones con lift de 1 px en hover (`btn-lift`).
+
+### Pendiente
+- (Sigue) Decidir adónde apunta *Reservar visita técnica* (mailto, Calendly, formulario propio).
+- (Sigue) Foto real de un proyecto del estudio para reemplazar el placeholder del slider.
+- (Sigue) Validar en móvil real (no solo mental): sobre todo el hero, que ahora es monocolumna largo.
+
+---
+
 ## 2025 · Sesión de refresco visual
 
 ### Radiografía de marca

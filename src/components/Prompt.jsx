@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { SUGGESTIONS } from '../data/products.js';
 
-// Zona inferior del panel derecho: atajos (chips ghost), historial breve,
-// input libre. Cambia a sans, baja el mono, mantiene la legibilidad.
-// El botón Enviar usa verde corporativo — único punto de color del panel.
+// Prompt denso: chips en una sola fila cuando caben, historial
+// más compacto, input sin aire vacío. Padding recortado.
 
 export default function Prompt({ onSubmit, messages, pending }) {
   const [text, setText] = useState('');
@@ -28,23 +27,29 @@ export default function Prompt({ onSubmit, messages, pending }) {
     }
   };
 
-  const recent = messages.slice(-4);
+  const recent = messages.slice(-6);
 
   return (
-    <div className="border-t border-ink/10">
-      {/* Atajos */}
-      <div className="px-5 md:px-6 pt-6 pb-4 border-b border-ink/5">
-        <p className="font-sans text-[10px] uppercase tracking-[0.28em] text-mute mb-3">
-          Atajos · iteración rápida
-        </p>
-        <div className="flex flex-wrap gap-2">
+    <div className="border-t border-ink/15 bg-cream">
+
+      {/* Atajos — un solo grid horizontal */}
+      <div className="px-5 pt-4 pb-3">
+        <div className="flex items-baseline justify-between mb-2">
+          <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-mute">
+            Atajos
+          </span>
+          <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-mute">
+            ⌘ intro
+          </span>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
           {SUGGESTIONS.map((s) => (
             <button
               key={s}
               type="button"
               disabled={pending}
               onClick={() => send(s)}
-              className="font-sans text-[10px] uppercase tracking-[0.22em] border border-ink/30 px-3 py-1.5 text-ink hover:bg-ink hover:text-cream disabled:opacity-40 transition-colors"
+              className="font-mono text-[10px] uppercase tracking-[0.22em] border border-ink/30 px-2.5 py-1.5 text-ink hover:bg-ink hover:text-cream disabled:opacity-40 transition-colors"
             >
               {s}
             </button>
@@ -56,25 +61,25 @@ export default function Prompt({ onSubmit, messages, pending }) {
       {(recent.length > 0 || pending) && (
         <div
           ref={scrollRef}
-          className="px-5 md:px-6 py-3 max-h-[140px] overflow-y-auto"
+          className="px-5 py-2 max-h-[120px] overflow-y-auto border-y border-ink/10"
         >
           {recent.map((m, i) => (
             <div
               key={`${m.ts}-${i}`}
-              className={`mt-2 first:mt-0 ${m.role === 'user' ? 'text-right' : 'text-left'}`}
+              className={`py-1 flex gap-2 items-baseline ${m.role === 'user' ? 'flex-row-reverse text-right' : ''}`}
             >
-              <span className="font-sans text-[9px] uppercase tracking-[0.3em] text-mute mr-2">
+              <span className="font-mono text-[9px] uppercase tracking-[0.28em] text-mute shrink-0">
                 {m.role === 'user' ? 'Tú' : 'IA'}
               </span>
-              <span className={`font-sans text-[13px] md:text-sm text-ink ${m.role === 'user' ? '' : 'italic'}`}>
+              <span className={`font-sans text-[13px] leading-snug text-ink ${m.role === 'user' ? 'italic' : ''}`}>
                 {m.text}
               </span>
             </div>
           ))}
           {pending && (
-            <div className="mt-2 text-left">
-              <span className="font-sans text-[9px] uppercase tracking-[0.3em] text-mute mr-2">IA</span>
-              <span className="font-sans text-sm italic text-mute animate-pulse">
+            <div className="py-1 flex gap-2 items-baseline">
+              <span className="font-mono text-[9px] uppercase tracking-[0.28em] text-mute shrink-0">IA</span>
+              <span className="font-sans text-[13px] italic text-mute animate-pulse">
                 Calculando…
               </span>
             </div>
@@ -83,12 +88,13 @@ export default function Prompt({ onSubmit, messages, pending }) {
       )}
 
       {/* Input */}
-      <div className="px-5 md:px-6 py-5 border-t border-ink/15">
-        <p className="font-sans text-[10px] uppercase tracking-[0.28em] text-mute mb-2">
+      <div className="px-5 py-3">
+        <label htmlFor="prompt-input" className="font-mono text-[10px] uppercase tracking-[0.28em] text-mute block mb-1.5">
           ¿Quieres cambiar algo?
-        </p>
+        </label>
         <div className="flex">
           <input
+            id="prompt-input"
             ref={inputRef}
             type="text"
             value={text}
@@ -96,14 +102,14 @@ export default function Prompt({ onSubmit, messages, pending }) {
             onKeyDown={onKeyDown}
             disabled={pending}
             placeholder='Ej: "Maceteros grises"'
-            className="flex-1 min-w-0 bg-transparent border border-ink/30 px-3 py-2.5 font-sans text-[15px] italic text-ink placeholder:text-mute placeholder:opacity-60 focus:outline-none focus:border-ink disabled:opacity-50"
+            className="flex-1 min-w-0 bg-transparent border border-ink/30 px-3 py-2 font-sans text-[14px] italic text-ink placeholder:text-mute placeholder:opacity-60 focus:outline-none focus:border-ink disabled:opacity-50"
           />
           <button
             type="button"
             onClick={() => send()}
             disabled={!text.trim() || pending}
             aria-label="Enviar"
-            className="border border-ink border-l-0 px-4 py-2.5 font-sans text-[12px] uppercase tracking-[0.22em] text-cream bg-accent hover:bg-accent/90 disabled:opacity-30 transition-colors"
+            className="font-mono text-[11px] uppercase tracking-[0.22em] border border-ink border-l-0 px-4 py-2 bg-ink text-cream hover:bg-ink/90 disabled:opacity-30 transition-colors"
           >
             ↩
           </button>

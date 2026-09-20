@@ -5,6 +5,23 @@ Todos los cambios relevantes del proyecto. Formato inspirado en
 
 ## [Sin publicar]
 
+## [0.3.0] — 2025-XX-XX · Vuelta al editorial bien hecho
+
+### Cambio
+- **Triada tipográfica restaurada**: Fraunces (serif titulares), Inter (sans cuerpo/UI), JetBrains Mono (SKUs, precios, metadatos).
+- **Hero monocolumna vertical**: eyebrow → título → subtítulo (la frase del usuario) → dropzone con curva asimétrica → colofón. Sin tarjetas ni rejilla 50/50.
+- **Strip de confianza fuera**. Sustituido por una sola línea editorial: `Estudio Es-Vert · Diseño 3D · Montaje profesional · Barcelona · Desde 2018`.
+- **Header reducido** a una línea (monograma ÉS—VERT a la izquierda, estado y botón "← Nuevo" a la derecha cuando aplica).
+- **Recibo** recupera el total serif grande con dot-leaders; nombres en Inter; metadatos en mono.
+- **Micro-interacciones**:
+  - Stagger de entrada (`fadeUp` con keyframes) en 4 bloques.
+  - Lift sutil (`btn-lift`) en botones: 1 px en `:hover`, vuelve en `:active`.
+- **Accesibilidad**: `:focus-visible` con outline verde corporativo; `prefers-reduced-motion` desactiva animaciones.
+
+### Conservado
+- Resultado (slider + sidebar) intacto: rejilla 70/30, curva asimétrica en el slider, prompt + recibo.
+- Paleta cream/ink/accent/taupe/mute.
+
 ## [0.2.0] — 2025-XX-XX · Refresco visual
 
 ### Cambio
