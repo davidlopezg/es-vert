@@ -13,6 +13,7 @@ export default function Result({
   onReset,
   onReservar,
   onRetryImage,
+  genError,
 }) {
   return (
     <section className="flex-1 grid grid-cols-1 md:grid-cols-10 min-h-0 border-t border-ink/10">
@@ -20,7 +21,8 @@ export default function Result({
         <BeforeAfterSlider
           before={beforeSrc || IMAGES.before}
           after={afterSrc || IMAGES.after}
-          regenerating={pending}
+          pending={pending}
+          error={genError}
           onRetry={onRetryImage}
         />
       </div>

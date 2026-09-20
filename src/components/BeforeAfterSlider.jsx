@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-// Slider Antes/Después con pointer events y feedback de estado de
-// generación de la imagen. Si la URL de la IA falla (rate-limit,
-// red, CORS), la <img> cae a `onError` y marcamos estado `error`
-// para mostrar un botón "Reintentar" sobre el chrome.
+// Slider Antes/Después con:
+//  - Pointer events (mouse + touch unificados)
+//  - Recorte del "antes" con clip-path
+//  - Overlay de carga cuando pending es true
+//  - Banner de error visible cuando la API falla
+//  - Botón reintentar + enlace "Ver URL" cuando la <img> falla
 
 function ImageLayer({ src, alt, side, onState }) {
   return (
@@ -18,11 +20,18 @@ function ImageLayer({ src, alt, side, onState }) {
   );
 }
 
+function Spinner() {
+  return (
+    <div className="inline-block w-10 h-10 border-[2.5px] border-ink/15 border-t-ink rounded-full animate-spin" />
+  );
+}
+
 export default function BeforeAfterSlider({
   before,
   after,
   label = 'terraza',
-  regenerating = false,
+  pending = false,
+  error = null,
   onRetry,
 }) {
   const [position, setPosition] = useState(50);
@@ -58,7 +67,6 @@ export default function BeforeAfterSlider({
 
   const insetRight = 100 - position;
 
-  // Reset estado cuando cambia la URL de la imagen.
   useEffect(() => {
     setImgState({ before: 'loading', after: 'loading' });
   }, [before, after]);
@@ -114,7 +122,7 @@ export default function BeforeAfterSlider({
       </div>
 
       {/* Etiquetas */}
-      <div className="absolute top-5 left-5 right-5 md:top-6 md:left-6 md:right-6 flex justify-between pointer-events-none">
+      <div className="absolute top-5 left-5 right-5 md:top-6 md:left-6 md:right-6 flex justify-between pointer-events-none z-10">
         <span className="font-sans text-[10px] uppercase tracking-[0.3em] bg-cream/95 text-ink px-3 py-1.5">
           Antes
         </span>
@@ -123,19 +131,60 @@ export default function BeforeAfterSlider({
         </span>
       </div>
 
-      {/* Pie con metadatos + estado de generación */}
+      {/* Overlay: spinner de carga */}
+      {pending && (
+        <div className="absolute inset-0 bg-cream/90 backdrop-blur-sm flex items-center justify-center z-20">
+          <div className="text-center px-6 max-w-sm">
+            <Spinner />
+            <p className="mt-5 font-mono text-[11px] uppercase tracking-[0.28em] text-ink">
+              Generando tu terraza
+            </p>
+            <p className="mt-2 font-sans text-[13px] text-mute leading-snug">
+              La IA está dibujando con tus productos y tu foto.
+              Espera 5–30 s según el provider.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Banner de error (visible siempre que haya error y no esté cargando) */}
+      {!pending && error && (
+        <div className="absolute top-0 left-0 right-0 z-30 bg-ink/95 text-cream backdrop-blur-sm">
+          <div className="px-4 md:px-6 py-3 flex flex-wrap items-center gap-3 text-[12px]">
+            <span className="font-mono text-[10px] uppercase tracking-[0.25em] text-cream/60">
+              Error
+            </span>
+            <span className="font-sans text-[12px] leading-snug flex-1 min-w-[12rem]">
+              {error}
+            </span>
+            {onRetry && (
+              <button
+                type="button"
+                onClick={onRetry}
+                className="font-mono text-[11px] uppercase tracking-[0.22em] border border-cream/40 px-3 py-1 hover:bg-cream hover:text-ink transition-colors"
+              >
+                ↻ Reintentar
+              </button>
+            )}
+            <a
+              href="/es-vert/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-mono text-[11px] uppercase tracking-[0.22em] text-cream/70 hover:text-cream underline underline-offset-2"
+            >
+              Diagnóstico (F12 → consola)
+            </a>
+          </div>
+        </div>
+      )}
+
+      {/* Pie con metadatos */}
       <div className="absolute bottom-5 left-5 right-5 md:bottom-6 md:left-6 md:right-6 flex flex-wrap justify-between items-center gap-2 pointer-events-none">
         <span className="font-sans text-[10px] uppercase tracking-[0.22em] bg-cream/95 text-ink px-3 py-1.5">
           Terraza · 24 m² · orientación SO
         </span>
         <div className="flex items-center gap-2 pointer-events-auto">
-          {regenerating && (
-            <span className="font-sans text-[10px] uppercase tracking-[0.22em] bg-accent/95 text-cream px-3 py-1.5 flex items-center gap-2">
-              <span className="inline-block w-2 h-2 bg-cream rounded-full animate-pulse" />
-              IA · regenerando
-            </span>
-          )}
-          {!regenerating && afterFailed && onRetry && (
+          {!pending && afterFailed && !error && onRetry && (
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
@@ -144,20 +193,22 @@ export default function BeforeAfterSlider({
               >
                 ↻ Reintentar
               </button>
-              <a
-                href={after}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-sans text-[10px] uppercase tracking-[0.22em] bg-cream text-mute border border-ink/30 px-3 py-1.5 hover:text-ink transition-colors"
-                title="Abre la URL de la IA en una pestaña nueva para diagnosticar"
-              >
-                ↗ Ver URL
-              </a>
+              {after && (
+                <a
+                  href={after}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-sans text-[10px] uppercase tracking-[0.22em] bg-cream text-mute border border-ink/30 px-3 py-1.5 hover:text-ink transition-colors"
+                  title="Abre la URL de la IA en una pestaña nueva"
+                >
+                  ↗ Ver URL
+                </a>
+              )}
             </div>
           )}
-          {!regenerating && !afterFailed && (
+          {!pending && !error && !afterFailed && (
             <span className="font-sans text-[10px] uppercase tracking-[0.22em] bg-cream/95 text-mute px-3 py-1.5">
-              {afterFailed ? 'IA · sin conexión' : 'IA · render'}
+              IA · render
             </span>
           )}
         </div>

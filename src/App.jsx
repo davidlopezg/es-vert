@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Header from './components/Header.jsx';
 import Menu from './components/Menu.jsx';
 import Hero from './components/Hero.jsx';
@@ -15,7 +15,6 @@ const FOOTER_STATUS = AI_CFG.enabled
   ? `Conectado · ${LLM_LABEL} · ${AI_CFG.mode}`
   : 'Demo · datos mock · imagen IA';
 
-// --- Mutadores puros del recibo ----------------------------------------
 function applyAction(lines, action) {
   switch (action.type) {
     case 'ADD': {
@@ -44,7 +43,6 @@ function applyAction(lines, action) {
   }
 }
 
-// Renombrar stages a la nueva nomenclatura: home | detalle
 export default function App() {
   const [stage, setStage] = useState('home');
   const [lines, setLines] = useState(INITIAL_PRODUCTS);
@@ -52,27 +50,50 @@ export default function App() {
   const [pending, setPending] = useState(false);
   const [beforeSrc, setBeforeSrc] = useState(null);
   const [afterSrc, setAfterSrc] = useState(null);
+  const [genError, setGenError] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const regenIdRef = useRef(0);   // descarta generaciones obsoletas
-  const inflightIdRef = useRef(0); // single-flight: si hay dos clics, solo vale el último
+  const regenIdRef = useRef(0);
+  const inflightIdRef = useRef(0);
+
+  // Diagnóstico: qué providers están configurados en este build.
+  useEffect(() => {
+    const env = import.meta.env || {};
+    console.log('[Es-Vert · config]', {
+      llm: AI_CFG.enabled
+        ? `${LLM_LABEL} · ${AI_CFG.mode}`
+        : 'mock (sin VITE_MINIMAX_API_KEY ni VITE_AI_PROXY_URL)',
+      imageHF: env.VITE_HUGGINGFACE_TOKEN ? 'ON' : 'off',
+      imageCustom:
+        env.VITE_IMAGE_API_URL && env.VITE_IMAGE_API_KEY && env.VITE_IMAGE_MODEL
+          ? 'ON' : 'off',
+      imageDefault: 'Pollinations (1 cola por IP, tier anónimo)',
+    });
+  }, []);
 
   const goHome = useCallback(() => setStage('home'), []);
 
-  // --- Subida de foto → primera generación de "después" ----------------
   const handleFile = useCallback((file) => {
     const reader = new FileReader();
     reader.onload = async (e) => {
       const dataUrl = e.target.result;
       setBeforeSrc(dataUrl);
+      setAfterSrc(null);              // limpiamos el "antes" stale
+      setGenError(null);              // limpiamos errores previos
       setStage('detalle');
 
       const myId = ++inflightIdRef.current;
       try {
         setPending(true);
         const url = await generateAfter(dataUrl);
-        if (myId === inflightIdRef.current && url) setAfterSrc(url);
+        if (myId === inflightIdRef.current && url) {
+          setAfterSrc(url);
+          setGenError(null);
+        }
       } catch (err) {
-        if (myId === inflightIdRef.current) console.warn('handleFile:', err);
+        if (myId === inflightIdRef.current) {
+          setGenError(err.message || String(err));
+          console.warn('[Es-Vert] handleFile:', err);
+        }
       } finally {
         if (myId === inflightIdRef.current) setPending(false);
       }
@@ -82,40 +103,45 @@ export default function App() {
 
   const handleDemo = useCallback(async () => {
     setStage('detalle');
+    setAfterSrc(null);
+    setGenError(null);
     const myId = ++inflightIdRef.current;
     try {
       setPending(true);
       const url = await generateAfter(null);
       if (myId === inflightIdRef.current && url) setAfterSrc(url);
     } catch (err) {
-      if (myId === inflightIdRef.current) console.warn('handleDemo:', err);
+      if (myId === inflightIdRef.current) {
+        setGenError(err.message || String(err));
+        console.warn('[Es-Vert] handleDemo:', err);
+      }
     } finally {
       if (myId === inflightIdRef.current) setPending(false);
     }
   }, []);
 
-  // --- Re-generar "después" tras una acción del LLM -------------------
   const regenerateAfter = useCallback(async (currentLines) => {
     if (!beforeSrc) return;
     const myId = ++regenIdRef.current;
+    setGenError(null);
     try {
       setPending(true);
       const prompt = buildImagePrompt(currentLines);
       const url = await generateAfter(beforeSrc, { prompt });
-      // Solo aplicamos si esta generación es la más reciente
       if (myId === regenIdRef.current && url) {
         setAfterSrc(url);
+        setGenError(null);
       }
     } catch (err) {
-      console.warn('Re-generación "después":', err);
-    } finally {
       if (myId === regenIdRef.current) {
-        setPending(false);
+        setGenError(err.message || String(err));
+        console.warn('[Es-Vert] regen:', err);
       }
+    } finally {
+      if (myId === regenIdRef.current) setPending(false);
     }
   }, [beforeSrc]);
 
-  // --- Prompt del chat -------------------------------------------------
   const handlePrompt = useCallback(async (payload) => {
     const { text, attachments } = payload;
     setMessages(m => [
@@ -135,7 +161,6 @@ export default function App() {
         });
       } else {
         await new Promise(r => setTimeout(r, 600));
-        // Mock actual: el texto contiene la pista principal.
         response = mockRefine(text || '', lines);
       }
     } catch (err) {
@@ -152,13 +177,11 @@ export default function App() {
     setMessages(m => [...m, { role: 'ai', text: response.reply, ts: Date.now() }]);
     setPending(false);
 
-    // Si la acción modifica el set y tenemos foto subida, regenerar "después".
     if (response.action && beforeSrc) {
       regenerateAfter(mutatedLines);
     }
   }, [lines, beforeSrc, regenerateAfter]);
 
-  // --- CTA final → mailto pre-armado ----------------------------------
   const handleReservar = useCallback(() => {
     const subject = encodeURIComponent('Es-Vert · Solicitud de diseño 3D');
     const body = encodeURIComponent(
@@ -191,6 +214,7 @@ export default function App() {
             onReset={goHome}
             onReservar={handleReservar}
             onRetryImage={() => regenerateAfter(lines)}
+            genError={genError}
           />
         )}
       </main>
