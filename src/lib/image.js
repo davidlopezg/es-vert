@@ -1,10 +1,11 @@
 // =============================================================
-// Adapter de generación de imagen · tres niveles de calidad.
+// Adapter de generación de imagen · tres niveles + fallback.
 // =============================================================
-//  1. Pollinations  →  cero-config, gratis, sin signup. T2I.
-//                       Limitado por IP (1 cola, tier anónimo).
-//  2. HuggingFace  →  free tier, SDXL, image-to-image real.
-//  3. Custom       →  Replicate / fal.ai / Stability.
+//  1. HuggingFace (free) cuando VITE_HUGGINGFACE_TOKEN está definida
+//     El navegador puede no llegar (CORS / red). Si falla por
+//     network/CORS, fallback automático a Pollinations sin error.
+//  2. Custom (Replicate / fal.ai / Stability) con sus tres vars
+//  3. Pollinations (zero-config, gratis, sin signup). T2I.
 
 const BASE_PROMPT = [
   'Photorealistic contemporary Mediterranean terrace redesign',
@@ -28,62 +29,23 @@ export function buildImagePrompt(lines) {
   ].join(' · ');
 }
 
-// ---- 1) Pollinations (default, sin credenciales) ----------------------
-//    Tier anónimo = 1 request en cola por IP. Si la cola está
-//    ocupada, el servidor responde 429/500 con JSON de error.
-//    Solución: HEAD para detectar el estado antes de asignar la URL,
-//    retry con backoff si está saturado.
-async function pollinations(prompt, opts = {}) {
-  const w = opts.width  || 1024;   // 1600 saturaba la cola, bajamos
-  const h = opts.height ||  768;
-  const seed = opts.seed ?? Math.floor(Math.random() * 1e9);
-  const params = new URLSearchParams({
-    model: 'flux',                 // explícito: evita Sana (más caro)
-    width: String(w),
-    height: String(h),
-    seed: String(seed),
-    nologo: 'true',
-    // enhance:false → Pollinations va directo al modelo base, no Sana
-  });
-  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?${params}`;
-
-  const maxAttempts = 4;
-  let lastErr;
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    let probe;
-    try {
-      probe = await fetch(url, { method: 'HEAD' });
-    } catch (e) {
-      // network error → reintentar
-      lastErr = e;
-      await sleep(3000);
-      continue;
-    }
-
-    if (probe.status === 200) return url;
-
-    if (probe.status === 429 || probe.status === 500 ||
-        probe.status === 502 || probe.status === 503 || probe.status === 504) {
-      // Cola llena o servidor saturado → backoff progresivo.
-      const base = 4000 * (attempt + 1);
-      const jitter = Math.random() * 2000;
-      const wait = Math.min(20000, base + jitter);
-      lastErr = new Error(`Pollinations ${probe.status}, reintento ${attempt + 1}/${maxAttempts}`);
-      await sleep(wait);
-      continue;
-    }
-
-    // Otro error HTTP (4xx real): no reintentar, mostrar.
-    const t = await probe.text().catch(() => '');
-    throw new Error(`Pollinations ${probe.status}: ${t.slice(0, 200)}`);
-  }
-
-  throw lastErr || new Error('Pollinations agotó reintentos (rate-limit). Prueba HF u otro provider.');
+// Network/CORS / abort → fallback silencioso a Pollinations.
+// Error HTTP real (4xx/5xx con cuerpo) → se propaga al usuario.
+function isNetworkError(e) {
+  return (
+    e?.name === 'TypeError' ||
+    e?.name === 'AbortError' ||
+    (typeof e?.message === 'string' && (
+      e.message.includes('Failed to fetch') ||
+      e.message.includes('NetworkError') ||
+      e.message.includes('fetch failed') ||
+      e.message.includes('Network request failed') ||
+      e.message.includes('Load failed')
+    ))
+  );
 }
 
-const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-
-// ---- 2) Hugging Face Inference (free tier) ----------------------------
+// ---- 1) Hugging Face Inference (free tier) ----------------------------
 async function huggingFace(beforeDataUrl, prompt, opts = {}) {
   const env = import.meta.env || {};
   const token = env.VITE_HUGGINGFACE_TOKEN;
@@ -126,7 +88,7 @@ async function huggingFace(beforeDataUrl, prompt, opts = {}) {
   });
 }
 
-// ---- 3) Provider custom (Replicate, fal.ai, etc.) ---------------------
+// ---- 2) Provider custom (Replicate, fal.ai, etc.) ---------------------
 async function custom(beforeDataUrl, prompt, opts = {}) {
   const env = import.meta.env || {};
   const url   = env.VITE_IMAGE_API_URL;
@@ -165,18 +127,97 @@ async function custom(beforeDataUrl, prompt, opts = {}) {
   );
 }
 
-// ---- Dispatcher principal ---------------------------------------------
+// ---- 3) Pollinations (fallback; default cuando nada más hay) ---------
+async function pollinations(prompt, opts = {}) {
+  const w = opts.width  || 1024;
+  const h = opts.height ||  768;
+  const seed = opts.seed ?? Math.floor(Math.random() * 1e9);
+  const params = new URLSearchParams({
+    model: 'flux',
+    width: String(w),
+    height: String(h),
+    seed: String(seed),
+    nologo: 'true',
+  });
+  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?${params}`;
+
+  const maxAttempts = 4;
+  let lastErr;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    let probe;
+    try {
+      probe = await fetch(url, { method: 'HEAD' });
+    } catch (e) {
+      lastErr = e;
+      await sleep(3000);
+      continue;
+    }
+    if (probe.status === 200) return url;
+    if (probe.status === 429 || probe.status === 500 ||
+        probe.status === 502 || probe.status === 503 || probe.status === 504) {
+      const base = 4000 * (attempt + 1);
+      const jitter = Math.random() * 2000;
+      await sleep(Math.min(20000, base + jitter));
+      lastErr = new Error(`Pollinations ${probe.status}, reintento ${attempt + 1}/${maxAttempts}`);
+      continue;
+    }
+    const t = await probe.text().catch(() => '');
+    throw new Error(`Pollinations ${probe.status}: ${t.slice(0, 200)}`);
+  }
+  throw lastErr || new Error('Pollinations agotó reintentos (rate-limit).');
+}
+
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+// ---- Dispatcher con fallback automático --------------------------------
+// Cada provider se prueba en orden. Si uno falla por NETWORK/CORS,
+// se cae al siguiente SIN propagar error. Solo errores HTTP reales
+// del provider principal detienen el flujo (token malo, modelo caído).
 export async function generateAfter(beforeDataUrl, opts = {}) {
   const env = import.meta.env || {};
   const prompt = opts.prompt || BASE_PROMPT;
 
+  const chain = [];
+
   if (env.VITE_HUGGINGFACE_TOKEN && beforeDataUrl) {
-    return huggingFace(beforeDataUrl, prompt, opts);
+    chain.push({
+      name: 'huggingface',
+      run: () => huggingFace(beforeDataUrl, prompt, opts),
+    });
   }
   if (env.VITE_IMAGE_API_URL && env.VITE_IMAGE_API_KEY && env.VITE_IMAGE_MODEL && beforeDataUrl) {
-    return custom(beforeDataUrl, prompt, opts);
+    chain.push({
+      name: 'custom',
+      run: () => custom(beforeDataUrl, prompt, opts),
+    });
   }
-  return pollinations(prompt, opts);
+  chain.push({
+    name: 'pollinations',
+    run: () => pollinations(prompt, opts),
+  });
+
+  let lastErr = null;
+  const tried = [];
+  for (const p of chain) {
+    try {
+      return await p.run();
+    } catch (e) {
+      tried.push({ name: p.name, error: e });
+      if (isNetworkError(e)) {
+        console.warn(`[Es-Vert] ${p.name} no responde (${e.message?.slice(0, 60) ?? 'fetch error'}), probando siguiente…`);
+        lastErr = e;
+        continue;
+      }
+      // Error real (HTTP 4xx/5xx) — no tiene sentido seguir.
+      throw e;
+    }
+  }
+
+  // Llegamos aquí solo si TODOS fallaron por network/CORS.
+  throw new Error(
+    `Ningún provider disponible. Probados: ${tried.map(t => t.name).join(', ')}. ` +
+    `Último error: ${lastErr?.message ?? 'desconocido'}`
+  );
 }
 
 export { BASE_PROMPT as DEFAULT_PROMPT };
