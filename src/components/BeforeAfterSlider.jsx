@@ -4,7 +4,7 @@ import { useCallback, useRef, useState } from 'react';
 // Etiquetas ahora en Montserrat uppercase tracking (sin mono).
 // Fondo del contenedor: cream, para que la curva asimétrica se vea.
 
-export default function BeforeAfterSlider({ before, after, label = 'terraza' }) {
+export default function BeforeAfterSlider({ before, after, label = 'terraza', regenerating = false }) {
   const [position, setPosition] = useState(50);
   const ref = useRef(null);
   const dragging = useRef(false);
@@ -97,8 +97,12 @@ export default function BeforeAfterSlider({ before, after, label = 'terraza' }) 
         <span className="font-sans text-[10px] uppercase tracking-[0.22em] bg-cream/95 text-ink px-3 py-1.5">
           Terraza · 24 m² · orientación SO
         </span>
-        <span className="font-sans text-[10px] uppercase tracking-[0.22em] bg-cream/95 text-mute px-3 py-1.5">
-          IA · render simulado
+        <span className={`font-sans text-[10px] uppercase tracking-[0.22em] px-3 py-1.5 ${
+          regenerating
+            ? 'bg-accent/95 text-cream'
+            : 'bg-cream/95 text-mute'
+        }`}>
+          {regenerating ? 'IA · regenerando…' : 'IA · render'}
         </span>
       </div>
     </div>

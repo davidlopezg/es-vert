@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import Header from './components/Header.jsx';
 import Menu from './components/Menu.jsx';
 import Hero from './components/Hero.jsx';
@@ -6,43 +6,70 @@ import Result from './components/Result.jsx';
 import Footer from './components/Footer.jsx';
 import { INITIAL_PRODUCTS } from './data/products.js';
 import { mockRefine } from './lib/matchAndRespond.js';
-import { callMinimax, getAIConfig, getImageConfig } from './lib/minimax.js';
-import { generateAfter } from './lib/image.js';
+import { callMinimax, getAIConfig } from './lib/minimax.js';
+import { generateAfter, buildImagePrompt } from './lib/image.js';
 
 const AI_CFG = getAIConfig();
-const IMG_CFG = getImageConfig();
 const LLM_LABEL = AI_CFG.mode === 'proxy' ? 'Proxy IA' : 'MiniMax';
-
 const FOOTER_STATUS = AI_CFG.enabled
-  ? `Conectado · ${LLM_LABEL} · ${AI_CFG.mode}${IMG_CFG.enabled ? ' + Image API' : ''}`
-  : 'Demo · datos mock';
+  ? `Conectado · ${LLM_LABEL} · ${AI_CFG.mode}`
+  : 'Demo · datos mock · imagen IA';
 
+// --- Mutadores puros del recibo ----------------------------------------
+function applyAction(lines, action) {
+  switch (action.type) {
+    case 'ADD': {
+      const ex = lines.find(l => l.id === action.line.id);
+      if (ex) return lines.map(l => l.id === action.line.id
+        ? { ...l, qty: l.qty + (action.line.qty || 1) }
+        : l);
+      return [...lines, { ...action.line, qty: action.line.qty || 1 }];
+    }
+    case 'REPLACE': {
+      const target = lines.find(l => l.id === action.id);
+      const others = lines.filter(l => l.id !== action.id);
+      return [
+        ...others,
+        { ...action.line, qty: action.line.qty ?? target?.qty ?? 1 },
+      ];
+    }
+    case 'ADD_QTY':
+      return lines.map(l => l.id === action.id
+        ? { ...l, qty: Math.max(1, l.qty + (action.by || 1)) }
+        : l);
+    case 'REMOVE':
+      return lines.filter(l => l.id !== action.id);
+    default:
+      return lines;
+  }
+}
+
+// Renombrar stages a la nueva nomenclatura: home | detalle
 export default function App() {
-  const [stage, setStage] = useState('hero');
+  const [stage, setStage] = useState('home');
   const [lines, setLines] = useState(INITIAL_PRODUCTS);
   const [messages, setMessages] = useState([]);
   const [pending, setPending] = useState(false);
   const [beforeSrc, setBeforeSrc] = useState(null);
   const [afterSrc, setAfterSrc] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const regenIdRef = useRef(0);   // token para descartar generaciones obsoletas
 
-  const goHero = useCallback(() => setStage('hero'), []);
+  const goHome = useCallback(() => setStage('home'), []);
 
+  // --- Subida de foto → primera generación de "después" ----------------
   const handleFile = useCallback((file) => {
     const reader = new FileReader();
     reader.onload = async (e) => {
       const dataUrl = e.target.result;
       setBeforeSrc(dataUrl);
-      setStage('result');
-      // Siempre intentamos regenerar el "después". El adapter elige
-      // provider (HF / custom / Pollinations) según lo que esté
-      // configurado en .env.local. Si todo falla, se mantiene el mock.
+      setStage('detalle');
       try {
         setPending(true);
         const url = await generateAfter(dataUrl);
         if (url) setAfterSrc(url);
       } catch (err) {
-        console.warn('Generación de "después" falló, se mantiene mock:', err);
+        console.warn('Generación inicial falló:', err);
       } finally {
         setPending(false);
       }
@@ -51,69 +78,83 @@ export default function App() {
   }, []);
 
   const handleDemo = useCallback(async () => {
-    // El demo dispara generación con el prompt curado (sin foto de origen).
-    setStage('result');
+    setStage('detalle');
     try {
       setPending(true);
       const url = await generateAfter(null);
       if (url) setAfterSrc(url);
     } catch (err) {
-      console.warn('Demo "después":', err);
+      console.warn('Demo:', err);
     } finally {
       setPending(false);
     }
   }, []);
 
-  // Mutadores del recibo (idénticos a v0.4.0)
-  const addLine = (line) => setLines(curr => {
-    const existing = curr.find(l => l.id === line.id);
-    if (existing) return curr.map(l => l.id === line.id ? { ...l, qty: l.qty + (line.qty || 1) } : l);
-    return [...curr, { ...line, qty: line.qty || 1 }];
-  });
-  const replaceLine = (id, newLine) => setLines(curr => {
-    const target = curr.find(l => l.id === id);
-    const others = curr.filter(l => l.id !== id);
-    return [...others, { ...newLine, qty: newLine.qty ?? target?.qty ?? 1 }];
-  });
-  const addQty = (id, by = 1) => setLines(curr =>
-    curr.map(l => l.id === id ? { ...l, qty: Math.max(1, l.qty + by) } : l)
-  );
-  const removeLine = (id) => setLines(curr => curr.filter(l => l.id !== id));
+  // --- Re-generar "después" tras una acción del LLM -------------------
+  const regenerateAfter = useCallback(async (currentLines) => {
+    if (!beforeSrc) return;
+    const myId = ++regenIdRef.current;
+    try {
+      setPending(true);
+      const prompt = buildImagePrompt(currentLines);
+      const url = await generateAfter(beforeSrc, { prompt });
+      // Solo aplicamos si esta generación es la más reciente
+      if (myId === regenIdRef.current && url) {
+        setAfterSrc(url);
+      }
+    } catch (err) {
+      console.warn('Re-generación "después":', err);
+    } finally {
+      if (myId === regenIdRef.current) {
+        setPending(false);
+      }
+    }
+  }, [beforeSrc]);
 
-  const handlePrompt = useCallback(async (input) => {
-    setMessages(m => [...m, { role: 'user', text: input, ts: Date.now() }]);
+  // --- Prompt del chat -------------------------------------------------
+  const handlePrompt = useCallback(async (payload) => {
+    const { text, attachments } = payload;
+    setMessages(m => [
+      ...m,
+      { role: 'user', text: text || ' ', attachments: attachments || [], ts: Date.now() },
+    ]);
     setPending(true);
 
     let response;
     try {
       if (AI_CFG.enabled) {
         response = await callMinimax({
-          prompt: input,
+          prompt: text,
           currentLines: lines,
           beforeImage: beforeSrc,
+          attachments,
         });
       } else {
-        await new Promise(r => setTimeout(r, 550));
-        response = mockRefine(input, lines);
+        await new Promise(r => setTimeout(r, 600));
+        // Mock actual: el texto contiene la pista principal.
+        response = mockRefine(text || '', lines);
       }
     } catch (err) {
       console.error(err);
       response = { reply: 'No he podido conectar con el modelo. Inténtalo de nuevo.', action: null };
     }
 
+    let mutatedLines = lines;
     if (response.action) {
-      switch (response.action.type) {
-        case 'ADD':     addLine(response.action.line); break;
-        case 'REPLACE': replaceLine(response.action.id, response.action.line); break;
-        case 'ADD_QTY': addQty(response.action.id, response.action.by || 1); break;
-        case 'REMOVE':  removeLine(response.action.id); break;
-      }
+      mutatedLines = applyAction(lines, response.action);
+      setLines(mutatedLines);
     }
+
     setMessages(m => [...m, { role: 'ai', text: response.reply, ts: Date.now() }]);
     setPending(false);
-  }, [lines, beforeSrc]);
 
-  // Placeholder de conversión (envía a un mailto en producción).
+    // Si la acción modifica el set y tenemos foto subida, regenerar "después".
+    if (response.action && beforeSrc) {
+      regenerateAfter(mutatedLines);
+    }
+  }, [lines, beforeSrc, regenerateAfter]);
+
+  // --- CTA final → mailto pre-armado ----------------------------------
   const handleReservar = useCallback(() => {
     const subject = encodeURIComponent('Es-Vert · Solicitud de diseño 3D');
     const body = encodeURIComponent(
@@ -128,12 +169,12 @@ export default function App() {
     <div className="min-h-screen flex flex-col bg-cream text-ink">
       <Header
         stage={stage}
-        onHome={goHero}
+        onHome={goHome}
         onMenu={() => setMenuOpen(true)}
       />
 
       <main className="flex-1 flex flex-col min-h-0">
-        {stage === 'hero' ? (
+        {stage === 'home' ? (
           <Hero onDemo={handleDemo} onFile={handleFile} />
         ) : (
           <Result
@@ -143,7 +184,7 @@ export default function App() {
             pending={pending}
             beforeSrc={beforeSrc}
             afterSrc={afterSrc}
-            onReset={goHero}
+            onReset={goHome}
             onReservar={handleReservar}
           />
         )}

@@ -22,6 +22,7 @@ export default function Result({
         <BeforeAfterSlider
           before={beforeSrc || IMAGES.before}
           after={afterSrc || IMAGES.after}
+          regenerating={pending}
         />
       </div>
 

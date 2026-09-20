@@ -1,32 +1,29 @@
 // =============================================================
-// Adapter MiniMax (LLM) · mismo patrón que HabitQuest.
+// Adapter MiniMax (LLM) · OpenAI Chat Completions compatible.
 // =============================================================
 // Dos modos:
-//   · direct  → navegador llama a api.minimax.io (uso personal)
-//   · proxy   → navegador llama a un Worker de Cloudflare que
-//                custodia la API key (uso público en GitHub Pages)
-//
-// Variables:
-//   VITE_AI_PROXY_URL      URL pública del Worker (si se usa modo proxy)
-//   VITE_AI_PROXY_TOKEN    token compartido opcional que exige el Worker
-//   VITE_MINIMAX_API_KEY   API key (solo modo direct)
-//   VITE_MINIMAX_BASE_URL  por defecto https://api.minimax.io/v1
-//   VITE_MINIMAX_MODEL     por defecto MiniMax-M2
+//   · direct  →  navegador → api.minimax.io
+//   · proxy   →  navegador → Cloudflare Worker que custodia la key
 
-const SYSTEM_PROMPT = `Eres el motor de diseño de Es-Vert, una herramienta que rediseña terrazas usando SKUs reales de mobiliario y plantas. Nunca inventes productos genéricos.
+const SYSTEM_PROMPT = `Eres el motor de diseño de Es-Vert, una herramienta que rediseña terrazas usando SKUs reales de mobiliario y plantas. Nunca inventes productos genéricos ni precios descabellados.
 
 REGLAS DE CATÁLOGO:
-- Solo trabajas con marcas reales: Kave Home, Vidri, Stone Garden, Maisons du Monde, IKEA, La Redoute, Tika, Fermob, Secto, Moebe.
+- Marcas reales: Kave Home, Vidri, Stone Garden, Maisons du Monde, IKEA, La Redoute, Tika, Fermob, Secto, Moebe.
 - Rangos de precio orientativos (EUR):
   * Pérgola madera 800–2500
   * Jardinera / macetero 25–220
   * Suelo m² 30–130
-  * Olivo / higuera 35–180
+  * Olivo / higuera / hibiscus 35–180
   * Set iluminación 120–450
   * Conjunto exterior 600–1800
-- Si el usuario pide algo fuera del catálogo, action = null.
+- Si la petición no encaja con el catálogo, action=null con reply explicando.
 
-IDIOMA Y TONO: castellano, tono editorial sobrio (sin exclamaciones, sin emojis). Una o dos frases. El lector mira una propuesta, no es un cliente al que seducir.
+IMÁGENES DE PRODUCTO:
+- Si el usuario adjunta imágenes de productos, identifícalas (tipo/color/material/forma).
+- Devuelve una línea con un id auto-generado (kebab-case), nombre descriptivo, qty 1, precio realista.
+- Si no puedes identificar el producto de la imagen, action=null con reply="No identifico el producto de la imagen adjunta. ¿Puedes decirme qué es?".
+
+IDIOMA Y TONO: castellano, editorial sobrio (sin exclamaciones ni emojis). Una o dos frases. El lector mira una propuesta, no es un cliente al que seducir.
 
 ESQUEMA DE RESPUESTA (JSON estricto):
 {
@@ -44,7 +41,7 @@ ESQUEMA DE RESPUESTA (JSON estricto):
   }
 }`;
 
-const DEFAULT_BASE = 'https://api.minimax.io/v1';
+const DEFAULT_BASE  = 'https://api.minimax.io/v1';
 const DEFAULT_MODEL = 'MiniMax-M2';
 
 export function getAIConfig() {
@@ -69,38 +66,32 @@ export function getAIConfig() {
 
 export function getImageConfig() {
   const env = import.meta.env || {};
-  const proxyUrl  = String(env.VITE_AI_PROXY_URL || '').trim();
-  const proxyTok  = String(env.VITE_AI_PROXY_TOKEN || '').trim();
-  const apiUrl    = String(env.VITE_IMAGE_API_URL  || '').trim();
-  const apiKey    = String(env.VITE_IMAGE_API_KEY  || '').trim();
-  const model     = String(env.VITE_IMAGE_MODEL    || '').trim();
-  // Si hay proxy y el endpoint de imagen del proxy está marcado, se usa proxy.
-  const viaProxy  = proxyUrl && String(env.VITE_IMAGE_VIA_PROXY ?? 'true') !== 'false';
-
   return {
-    enabled: !!apiUrl && !!apiKey && !!model,
-    viaProxy,
-    proxyUrl,
-    proxyToken: proxyTok,
-    apiUrl,
-    apiKey,
-    model,
+    hasHF: !!env.VITE_HUGGINGFACE_TOKEN,
+    hasCustom: !!(env.VITE_IMAGE_API_URL && env.VITE_IMAGE_API_KEY && env.VITE_IMAGE_MODEL),
+    hfModel: env.VITE_HUGGINGFACE_MODEL || 'stabilityai/stable-diffusion-xl-base-1.0',
   };
 }
 
-export async function callMinimax({ prompt, currentLines, beforeImage }) {
+export async function callMinimax({ prompt, currentLines, beforeImage, attachments }) {
   const cfg = getAIConfig();
   if (!cfg.enabled) {
     throw new Error(
-      'MiniMax no configurado: define VITE_MINIMAX_API_KEY (modo direct) ' +
-      'o VITE_AI_PROXY_URL (modo proxy).'
+      'MiniMax no configurado: define VITE_MINIMAX_API_KEY o VITE_AI_PROXY_URL.'
     );
   }
 
-  // Contenido multimodal (texto + imagen opcional del "antes").
+  // Contenido multimodal: foto del antes + adjuntos del usuario + JSON + texto.
   const userContent = [];
   if (beforeImage) {
     userContent.push({ type: 'image_url', image_url: { url: beforeImage } });
+  }
+  if (attachments && attachments.length > 0) {
+    for (const a of attachments) {
+      if (a?.dataUrl) {
+        userContent.push({ type: 'image_url', image_url: { url: a.dataUrl } });
+      }
+    }
   }
   userContent.push({
     type: 'text',
@@ -111,14 +102,12 @@ export async function callMinimax({ prompt, currentLines, beforeImage }) {
     text: `Petición del usuario: "${prompt}"\nResponde solo con el JSON pedido.`,
   });
 
-  // Modo direct → Authorization con la API key real de MiniMax.
-  // Modo proxy  → Authorization con el token compartido (si está definido).
   const headers = { 'Content-Type': 'application/json' };
   if (cfg.mode === 'direct') headers.Authorization = `Bearer ${cfg.apiKey}`;
   else if (cfg.proxyToken)    headers.Authorization = `Bearer ${cfg.proxyToken}`;
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 25000);
+  const timer = setTimeout(() => controller.abort(), 30000);
 
   try {
     const res = await fetch(`${cfg.baseUrl.replace(/\/$/, '')}/chat/completions`, {

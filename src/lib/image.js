@@ -2,28 +2,36 @@
 // Adapter de generación de imagen · tres niveles de calidad.
 // =============================================================
 //  1. Pollinations  →  cero-config, gratis, sin signup. T2I.
-//                       Bueno para demo, no usa tu foto.
 //  2. HuggingFace  →  free tier, SDXL, image-to-image real.
-//                       Necesita token gratuito (sin tarjeta).
 //  3. Custom       →  Replicate / fal.ai / Stability, lo que tengas.
 
-const DEFAULT_PROMPT = [
-  'Elegant contemporary Mediterranean terrace redesign',
-  'wooden pergola with horizontal shade slats overhead',
-  'large olive trees in minimalist cement planters',
-  'warm iroko wood decking with linear grain pattern',
-  'natural stone accent walls, subtle textures',
+const BASE_PROMPT = [
+  'Photorealistic contemporary Mediterranean terrace redesign',
   'premium outdoor furniture in neutral tones',
   'golden hour late afternoon natural sunlight',
   'architectural editorial photography',
-  'award-winning landscape design',
+  'contemporary Spanish landscape design',
   'sharp focus, magazine quality, ultra detailed',
 ].join(', ');
 
+// Construye el prompt para el "después" incorporando el set actual
+// de SKUs. Cuando el usuario añade una maceta, el prompt la nombra
+// explícitamente. No garantiza pixel-perfect (la generación visual
+// tiene su latencia), pero sesga el resultado hacia los productos.
+export function buildImagePrompt(lines) {
+  if (!lines || lines.length === 0) return BASE_PROMPT;
+  const items = lines
+    .filter(l => l.qty > 0)
+    .map(l => `${l.qty}× ${l.name}`)
+    .join(', ');
+  return [
+    'Photorealistic elegant Mediterranean terrace redesign featuring:',
+    items,
+    BASE_PROMPT,
+  ].join(' · ');
+}
+
 // ---- 1) Pollinations (default, sin credenciales) ----------------------
-//    https://pollinations.ai · Flux por defecto. Resultado directo
-//    como URL — se mete en <img src>. Si falla la generación,
-//    el componente cae al mock. Tarda 5-30 s según cola.
 function pollinationsUrl(prompt, opts = {}) {
   const w = opts.width  || 1600;
   const h = opts.height || 1100;
@@ -38,10 +46,7 @@ function pollinationsUrl(prompt, opts = {}) {
   return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?${params}`;
 }
 
-// ---- 2) Hugging Face Inference (free tier; mejor calidad) ------------
-//    Crea el token gratis (sin tarjeta) en
-//    https://huggingface.co/settings/tokens
-//    Modelo por defecto: stabilityai/stable-diffusion-xl-base-1.0
+// ---- 2) Hugging Face Inference (free tier) ----------------------------
 async function huggingFace(beforeDataUrl, prompt, opts = {}) {
   const env = import.meta.env || {};
   const token = env.VITE_HUGGINGFACE_TOKEN;
@@ -52,7 +57,6 @@ async function huggingFace(beforeDataUrl, prompt, opts = {}) {
     || env.VITE_HUGGINGFACE_MODEL
     || 'stabilityai/stable-diffusion-xl-base-1.0';
 
-  // HF acepta JSON con base64 limpio (sin prefijo `data:image/png;base64,`).
   const base64 = beforeDataUrl.split(',')[1];
 
   const res = await fetch(`https://api-inference.huggingface.co/models/${model}`, {
@@ -85,7 +89,7 @@ async function huggingFace(beforeDataUrl, prompt, opts = {}) {
   });
 }
 
-// ---- 3) Provider custom (Replicate, fal.ai, Stability, etc.) ---------
+// ---- 3) Provider custom (Replicate, fal.ai, etc.) ---------------------
 async function custom(beforeDataUrl, prompt, opts = {}) {
   const env = import.meta.env || {};
   const url   = env.VITE_IMAGE_API_URL;
@@ -125,11 +129,9 @@ async function custom(beforeDataUrl, prompt, opts = {}) {
 }
 
 // ---- Dispatcher principal ---------------------------------------------
-//    Devuelve siempre un string utilizable como <img src>:
-//    URL de Pollinations, dataURL de HF/custom, o string vacío.
 export async function generateAfter(beforeDataUrl, opts = {}) {
   const env = import.meta.env || {};
-  const prompt = opts.prompt || DEFAULT_PROMPT;
+  const prompt = opts.prompt || BASE_PROMPT;
 
   if (env.VITE_HUGGINGFACE_TOKEN && beforeDataUrl) {
     return huggingFace(beforeDataUrl, prompt, opts);
@@ -137,8 +139,7 @@ export async function generateAfter(beforeDataUrl, opts = {}) {
   if (env.VITE_IMAGE_API_URL && env.VITE_IMAGE_API_KEY && env.VITE_IMAGE_MODEL && beforeDataUrl) {
     return custom(beforeDataUrl, prompt, opts);
   }
-  // Default sin nada configurado — Pollinations.
   return pollinationsUrl(prompt, opts);
 }
 
-export { DEFAULT_PROMPT };
+export { BASE_PROMPT as DEFAULT_PROMPT };
