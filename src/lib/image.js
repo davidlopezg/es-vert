@@ -1,11 +1,14 @@
 // =============================================================
-// Adapter de generación de imagen · tres niveles + fallback.
+// Adapter de generación de imagen · cadena con fallback garantizado.
 // =============================================================
-//  1. HuggingFace (free) cuando VITE_HUGGINGFACE_TOKEN está definida
-//     El navegador puede no llegar (CORS / red). Si falla por
-//     network/CORS, fallback automático a Pollinations sin error.
-//  2. Custom (Replicate / fal.ai / Stability) con sus tres vars
-//  3. Pollinations (zero-config, gratis, sin signup). T2I.
+//   1. HuggingFace (si VITE_HUGGINGFACE_TOKEN + foto subida)
+//   2. Custom provider (Replicate / fal / Stability, si sus 3 vars)
+//   3. Pollinations (zero-config, sin signup). T2I. Hoy muy capado.
+//   4. Stock curado (picsum con seed) → ÚLTIMO RECURSO, nunca falla.
+//
+// Esta función SIEMPRE devuelve un string utilizable como <img src>.
+// Si todo lo anterior falla, devuelve un stock de picsum con un seed
+// determinista basado en la fecha.
 
 const BASE_PROMPT = [
   'Photorealistic contemporary Mediterranean terrace redesign',
@@ -29,8 +32,9 @@ export function buildImagePrompt(lines) {
   ].join(' · ');
 }
 
-// Network/CORS / abort → fallback silencioso a Pollinations.
-// Error HTTP real (4xx/5xx con cuerpo) → se propaga al usuario.
+// Network/CORS / abort → no propagamos; probamos el siguiente provider.
+// Error HTTP real (4xx/5xx) → tampoco bloquea la cadena: la app
+// siempre debe mostrar algo. Solo errores HTTP reales se loguean.
 function isNetworkError(e) {
   return (
     e?.name === 'TypeError' ||
@@ -45,12 +49,19 @@ function isNetworkError(e) {
   );
 }
 
+// Estado de la última generación — el DiagnosticPill lo lee.
+let lastSource = 'idle';
+
+export function getLastImageSource() {
+  return lastSource;
+}
+
 // ---- 1) Hugging Face Inference (free tier) ----------------------------
 async function huggingFace(beforeDataUrl, prompt, opts = {}) {
   const env = import.meta.env || {};
   const token = env.VITE_HUGGINGFACE_TOKEN;
-  if (!token) throw new Error('VITE_HUGGINGFACE_TOKEN no definido.');
-  if (!beforeDataUrl) throw new Error('HF requiere foto subida.');
+  if (!token) throw new Error('HF: VITE_HUGGINGFACE_TOKEN no definido.');
+  if (!beforeDataUrl) throw new Error('HF: requiere foto subida.');
 
   const model = opts.model
     || env.VITE_HUGGINGFACE_MODEL
@@ -80,10 +91,10 @@ async function huggingFace(beforeDataUrl, prompt, opts = {}) {
   }
 
   const blob = await res.blob();
-  return new Promise((resolve, reject) => {
+  return await new Promise((resolve, reject) => {
     const r = new FileReader();
     r.onload  = () => resolve(r.result);
-    r.onerror = () => reject(new Error('No se pudo codificar la imagen HF'));
+    r.onerror = () => reject(new Error('HF: no se pudo codificar la imagen'));
     r.readAsDataURL(blob);
   });
 }
@@ -94,8 +105,8 @@ async function custom(beforeDataUrl, prompt, opts = {}) {
   const url   = env.VITE_IMAGE_API_URL;
   const key   = env.VITE_IMAGE_API_KEY;
   const model = env.VITE_IMAGE_MODEL;
-  if (!url || !key || !model) throw new Error('Image API custom no configurada.');
-  if (!beforeDataUrl) throw new Error('Provider custom requiere foto.');
+  if (!url || !key || !model) throw new Error('custom: provider no configurado.');
+  if (!beforeDataUrl) throw new Error('custom: requiere foto subida.');
 
   const res = await fetch(url, {
     method: 'POST',
@@ -115,7 +126,7 @@ async function custom(beforeDataUrl, prompt, opts = {}) {
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    throw new Error(`Image API ${res.status}: ${body.slice(0, 200)}`);
+    throw new Error(`custom ${res.status}: ${body.slice(0, 200)}`);
   }
   const data = await res.json();
   return (
@@ -127,7 +138,7 @@ async function custom(beforeDataUrl, prompt, opts = {}) {
   );
 }
 
-// ---- 3) Pollinations (fallback; default cuando nada más hay) ---------
+// ---- 3) Pollinations (T2I, hoy capado) --------------------------------
 async function pollinations(prompt, opts = {}) {
   const w = opts.width  || 1024;
   const h = opts.height ||  768;
@@ -141,83 +152,88 @@ async function pollinations(prompt, opts = {}) {
   });
   const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?${params}`;
 
-  const maxAttempts = 4;
-  let lastErr;
+  const maxAttempts = 3;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     let probe;
     try {
       probe = await fetch(url, { method: 'HEAD' });
-    } catch (e) {
-      lastErr = e;
+    } catch {
       await sleep(3000);
       continue;
     }
     if (probe.status === 200) return url;
+
+    // 429/5xx: reintento con backoff
     if (probe.status === 429 || probe.status === 500 ||
         probe.status === 502 || probe.status === 503 || probe.status === 504) {
       const base = 4000 * (attempt + 1);
       const jitter = Math.random() * 2000;
-      await sleep(Math.min(20000, base + jitter));
-      lastErr = new Error(`Pollinations ${probe.status}, reintento ${attempt + 1}/${maxAttempts}`);
+      await sleep(Math.min(18000, base + jitter));
       continue;
     }
+
+    // 4xx real (incluido 403) → no reintentamos. Lanzamos para que la
+    // cadena caiga al siguiente provider.
     const t = await probe.text().catch(() => '');
-    throw new Error(`Pollinations ${probe.status}: ${t.slice(0, 200)}`);
+    throw new Error(`Pollinations ${probe.status}: ${t.slice(0, 200) || 'forbidden'}`);
   }
-  throw lastErr || new Error('Pollinations agotó reintentos (rate-limit).');
+  throw new Error('Pollinations agotó reintentos.');
 }
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-// ---- Dispatcher con fallback automático --------------------------------
-// Cada provider se prueba en orden. Si uno falla por NETWORK/CORS,
-// se cae al siguiente SIN propagar error. Solo errores HTTP reales
-// del provider principal detienen el flujo (token malo, modelo caído).
+// ---- 4) Stock curado (ÚLTIMO RECURSO) --------------------------------
+//    picsum da imágenes estables por seed. Cambiamos cada día para
+//    que no parezca la misma foto en todas las demos.
+function curatedStock() {
+  const d = new Date();
+  const stamp = `${d.getUTCFullYear()}${String(d.getUTCMonth()+1).padStart(2,'0')}${String(d.getUTCDate()).padStart(2,'0')}`;
+  return `https://picsum.photos/seed/esvert-${stamp}/1600/1100`;
+}
+
+// ---- Dispatcher principal ---------------------------------------------
 export async function generateAfter(beforeDataUrl, opts = {}) {
   const env = import.meta.env || {};
   const prompt = opts.prompt || BASE_PROMPT;
+  lastSource = 'starting';
 
-  const chain = [];
-
+  // 1) HuggingFace
   if (env.VITE_HUGGINGFACE_TOKEN && beforeDataUrl) {
-    chain.push({
-      name: 'huggingface',
-      run: () => huggingFace(beforeDataUrl, prompt, opts),
-    });
-  }
-  if (env.VITE_IMAGE_API_URL && env.VITE_IMAGE_API_KEY && env.VITE_IMAGE_MODEL && beforeDataUrl) {
-    chain.push({
-      name: 'custom',
-      run: () => custom(beforeDataUrl, prompt, opts),
-    });
-  }
-  chain.push({
-    name: 'pollinations',
-    run: () => pollinations(prompt, opts),
-  });
-
-  let lastErr = null;
-  const tried = [];
-  for (const p of chain) {
     try {
-      return await p.run();
+      const url = await huggingFace(beforeDataUrl, prompt, opts);
+      lastSource = 'huggingface';
+      return url;
     } catch (e) {
-      tried.push({ name: p.name, error: e });
-      if (isNetworkError(e)) {
-        console.warn(`[Es-Vert] ${p.name} no responde (${e.message?.slice(0, 60) ?? 'fetch error'}), probando siguiente…`);
-        lastErr = e;
-        continue;
-      }
-      // Error real (HTTP 4xx/5xx) — no tiene sentido seguir.
-      throw e;
+      const kind = isNetworkError(e) ? 'CORS/red' : e.message?.slice(0, 60) ?? 'error';
+      console.warn(`[Es-Vert] HF (${kind}) — siguiente provider.`);
     }
   }
 
-  // Llegamos aquí solo si TODOS fallaron por network/CORS.
-  throw new Error(
-    `Ningún provider disponible. Probados: ${tried.map(t => t.name).join(', ')}. ` +
-    `Último error: ${lastErr?.message ?? 'desconocido'}`
-  );
+  // 2) Custom
+  if (env.VITE_IMAGE_API_URL && env.VITE_IMAGE_API_KEY && env.VITE_IMAGE_MODEL && beforeDataUrl) {
+    try {
+      const url = await custom(beforeDataUrl, prompt, opts);
+      lastSource = 'custom';
+      return url;
+    } catch (e) {
+      const kind = isNetworkError(e) ? 'CORS/red' : e.message?.slice(0, 60) ?? 'error';
+      console.warn(`[Es-Vert] custom (${kind}) — siguiente provider.`);
+    }
+  }
+
+  // 3) Pollinations
+  try {
+    const url = await pollinations(prompt, opts);
+    lastSource = 'pollinations';
+    return url;
+  } catch (e) {
+    console.warn(`[Es-Vert] Pollinations (${e.message?.slice(0, 80)}) — fallback final.`);
+  }
+
+  // 4) Stock curado — siempre funciona
+  lastSource = 'curated';
+  console.warn('[Es-Vert] Usando stock curado como último recurso.');
+  return curatedStock();
 }
 
 export { BASE_PROMPT as DEFAULT_PROMPT };

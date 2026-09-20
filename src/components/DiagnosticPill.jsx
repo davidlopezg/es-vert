@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { getDiagnostic, diagnosticText } from '../lib/diagnostic.js';
+import { getLastImageSource } from '../lib/image.js';
 
 // Píldora fija, bottom-right, SIEMPRE visible en pantalla.
 //   - Punto verde  → al menos un provider de imagen cargado (HF o Custom)
@@ -31,16 +32,25 @@ export default function DiagnosticPill() {
   const diag = getDiagnostic();
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [imgSource, setImgSource] = useState(getLastImageSource());
+
+  // Refresca la fuente cuando cambia algo (polling cada 500ms; barato).
+  useEffect(() => {
+    const t = setInterval(() => setImgSource(getLastImageSource()), 500);
+    return () => clearInterval(t);
+  }, []);
 
   const dot = diag.ok
-    ? 'bg-accent'       // verde · provider de imagen OK
+    ? (imgSource === 'curated'
+        ? 'bg-amber-500' // ámbar · imagen cayó al stock curado
+        : 'bg-accent')   // verde · provider de imagen OK
     : (diag.hasAny
         ? 'bg-amber-500' // ámbar · solo LLM, sin imagen
         : 'bg-mute');    // gris · todo en mock/demo
 
-  const label = diag.ok
-    ? `IMG ${diag.hf ? 'HF' : 'Custom'}`
-    : 'DEMO';
+  const label = imgSource === 'curated'
+    ? 'STOCK'
+    : (diag.ok ? `IMG ${diag.hf ? 'HF' : 'Custom'}` : 'DEMO');
 
   const handleCopy = async () => {
     const ok = await copyText(diagnosticText(diag));
@@ -106,6 +116,14 @@ export default function DiagnosticPill() {
                 {diag.customImage ? 'ON' : 'off'}
               </span>
             </li>
+            <li className="flex items-baseline justify-between gap-3 pt-1 border-t border-ink/10">
+              <span className="font-sans text-[13px] text-mute">Última imagen</span>
+              <span className={`font-mono text-[11px] uppercase tracking-[0.18em] ${
+                imgSource === 'curated' ? 'text-amber-500' : 'text-accent'
+              }`}>
+                {imgSource}
+              </span>
+            </li>
           </ul>
 
           <div className="px-4 pb-4 flex flex-wrap gap-2">
@@ -129,10 +147,14 @@ export default function DiagnosticPill() {
           </div>
 
           <div className="px-4 pb-4 text-[11px] leading-snug text-mute border-t border-ink/10 pt-3">
-            Si tu <code className="font-mono text-[10px]">.env.local</code> tiene
-            <code className="font-mono text-[10px]"> VITE_HUGGINGFACE_TOKEN</code> pero
-            aquí dice <em>off</em>, reinicia <code className="font-mono text-[10px]">npm run dev</code>{' '}
-            después de crearlo.
+            Si dice <em>off</em> tras editar <code className="font-mono text-[10px]">.env.local</code>,
+            reinicia <code className="font-mono text-[10px]">npm run dev</code>.
+            {imgSource === 'curated' && (
+              <span className="block mt-2 text-amber-500">
+                ▲ Última imagen cayó al stock curado — ningún provider devolvió una IA real.
+                Para image-to-image real, despliega <code className="font-mono text-[10px]">ai-proxy/worker.js</code>.
+              </span>
+            )}
           </div>
         </div>
       )}
