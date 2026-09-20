@@ -111,6 +111,12 @@ export default function DiagnosticPill() {
               </span>
             </li>
             <li className="flex items-baseline justify-between gap-3">
+              <span className="font-sans text-[13px] text-mute">Imagen Replicate</span>
+              <span className={`font-mono text-[11px] uppercase tracking-[0.18em] ${diag.replicate ? 'text-accent' : 'text-ink/40'}`}>
+                {diag.replicate ? 'ON' : 'off'}
+              </span>
+            </li>
+            <li className="flex items-baseline justify-between gap-3">
               <span className="font-sans text-[13px] text-mute">Imagen Together.ai</span>
               <span className={`font-mono text-[11px] uppercase tracking-[0.18em] ${diag.together ? 'text-accent' : 'text-ink/40'}`}>
                 {diag.together ? 'ON' : 'off'}
@@ -140,14 +146,14 @@ export default function DiagnosticPill() {
             >
               {copied ? '✓ Copiado' : '⧉ Copiar estado'}
             </button>
-            {!diag.hf && !diag.together && !diag.customImage && (
+            {!diag.hf && !diag.replicate && !diag.together && !diag.customImage && (
               <a
-                href="https://api.together.xyz/settings/api-keys"
+                href="https://replicate.com/account/api-tokens"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="font-mono text-[11px] uppercase tracking-[0.22em] border border-ink/30 px-3 py-2 hover:bg-ink hover:text-cream transition-colors"
               >
-                ↗ Crear API key Together
+                ↗ Crear API key Replicate
               </a>
             )}
           </div>

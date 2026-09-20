@@ -2,12 +2,13 @@
 // Adapter de generación de imagen · cadena con fallback garantizado.
 // =============================================================
 //   1. HuggingFace (si VITE_HUGGINGFACE_TOKEN + foto subida)
-//   2. Together.ai (si VITE_TOGETHER_API_KEY) — browser-direct, FLUX
-//   3. Custom provider (Replicate / fal / Stability, si sus 3 vars)
-//   4. Pollinations (zero-config, sin signup). T2I. Hoy muy capado.
-//   5. Stock curado (picsum con seed) → ÚLTIMO RECURSO, nunca falla.
-//
-// Esta función SIEMPRE devuelve un string utilizable como <img src>.
+//   2. Replicate (si VITE_REPLICATE_API_TOKEN + foto subida) — img2img
+//      real, CORS-enabled para navegador. Única salida browser-direct
+//      que usa tu foto como conditioning.
+//   3. Together.ai (si VITE_TOGETHER_API_KEY) — T2I browser-direct.
+//   4. Custom provider (Replicate / fal / Stability)
+//   5. Pollinations (T2I, hoy capado).
+//   6. Stock curado (picsum) — ÚLTIMO RECURSO, nunca falla.
 
 const BASE_PROMPT = [
   'Photorealistic contemporary Mediterranean terrace redesign',
@@ -31,9 +32,6 @@ export function buildImagePrompt(lines) {
   ].join(' · ');
 }
 
-// Network/CORS / abort → no propagamos; probamos el siguiente provider.
-// Error HTTP real (4xx/5xx) → tampoco bloquea la cadena: la app
-// siempre debe mostrar algo. Solo errores HTTP reales se loguean.
 function isNetworkError(e) {
   return (
     e?.name === 'TypeError' ||
@@ -48,17 +46,129 @@ function isNetworkError(e) {
   );
 }
 
-// Estado de la última generación — el DiagnosticPill lo lee.
 let lastSource = 'idle';
+export function getLastImageSource() { return lastSource; }
 
-export function getLastImageSource() {
-  return lastSource;
+// ---- 1) Hugging Face Inference (free tier; necesita proxy) ------------
+async function huggingFace(beforeDataUrl, prompt, opts = {}) {
+  const env = import.meta.env || {};
+  const token = env.VITE_HUGGINGFACE_TOKEN;
+  if (!token) throw new Error('HF: VITE_HUGGINGFACE_TOKEN no definido.');
+  if (!beforeDataUrl) throw new Error('HF: requiere foto subida.');
+
+  const model = opts.model
+    || env.VITE_HUGGINGFACE_MODEL
+    || 'stabilityai/stable-diffusion-xl-base-1.0';
+
+  const base64 = beforeDataUrl.split(',')[1];
+
+  const res = await fetch(`https://api-inference.huggingface.co/models/${model}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      inputs: { image: base64, prompt, strength: 0.65, num_inference_steps: 30 },
+    }),
+  });
+
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    throw new Error(`HF ${res.status}: ${txt.slice(0, 200)}`);
+  }
+
+  const blob = await res.blob();
+  return await new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload  = () => resolve(r.result);
+    r.onerror = () => reject(new Error('HF: no se pudo codificar la imagen'));
+    r.readAsDataURL(blob);
+  });
 }
 
-// ---- 2) Together.ai (browser-direct, free $5 al registrarse) --------
-//    Crear cuenta + API key en https://api.together.xyz (10 s)
-//    Soporta CORS, así que funciona desde el navegador sin proxy.
-//    ⚠️ T2I: no condiciona sobre la foto del usuario, solo prompt.
+// ---- 2) Replicate (browser-DIRECT, CORS-enabled, img2img REAL) --------
+//    Sign up: https://replicate.com (Google login, $5 free credits)
+//    API keys: https://replicate.com/account/api-tokens
+//
+//    ⚠️ Image-to-image DE VERDAD: la imagen del usuario entra al modelo
+//    como conditioning. Stability AI SDXL con input.image = tu foto
+//    transformada según prompt_strength.
+async function replicate(beforeDataUrl, prompt, opts = {}) {
+  const env = import.meta.env || {};
+  const token = env.VITE_REPLICATE_API_TOKEN;
+  if (!token) throw new Error('Replicate: VITE_REPLICATE_API_TOKEN no definido.');
+  if (!beforeDataUrl) throw new Error('Replicate: requiere foto subida.');
+
+  const model = env.VITE_REPLICATE_MODEL || 'stability-ai/sdxl';
+  const promptStrength = Number(opts.strength ?? env.VITE_REPLICATE_STRENGTH ?? 0.65);
+
+  const headers = {
+    Authorization: `Token ${token}`,
+    'Content-Type': 'application/json',
+  };
+
+  // Crear predicción
+  const createBody = {
+    model,
+    input: {
+      image: beforeDataUrl,
+      prompt,
+      prompt_strength: promptStrength,
+      num_inference_steps: 30,
+    },
+  };
+
+  // Si el usuario define VITE_REPLICATE_VERSION, usa "version" en vez de "model"
+  if (env.VITE_REPLICATE_VERSION) {
+    delete createBody.model;
+    createBody.version = env.VITE_REPLICATE_VERSION;
+  }
+
+  const createRes = await fetch('https://api.replicate.com/v1/predictions', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(createBody),
+  });
+
+  if (!createRes.ok) {
+    const txt = await createRes.text().catch(() => '');
+    throw new Error(`Replicate submit ${createRes.status}: ${txt.slice(0, 250)}`);
+  }
+
+  const prediction = await createRes.json();
+
+  // Caso 1: respuesta síncrona con output directo
+  if (prediction.output && !prediction.urls?.get) {
+    return Array.isArray(prediction.output) ? prediction.output[0] : prediction.output;
+  }
+
+  // Caso 2: hay que poll para obtener resultado
+  const pollUrl = prediction.urls?.get;
+  if (!pollUrl) throw new Error('Replicate: sin URL de polling ni output');
+
+  const deadline = Date.now() + 90_000; // 90 s máx
+  while (Date.now() < deadline) {
+    await sleep(2000);
+    try {
+      const pollRes = await fetch(pollUrl, { headers });
+      if (!pollRes.ok) continue;
+      const status = await pollRes.json();
+      if (status.status === 'succeeded') {
+        return Array.isArray(status.output) ? status.output[0] : status.output;
+      }
+      if (status.status === 'failed' || status.status === 'canceled') {
+        throw new Error(`Replicate ${status.status}: ${status.error || 'error'}`);
+      }
+    } catch (e) {
+      if (!isNetworkError(e)) throw e;
+      // network blip al hacer polling — sigue intentando
+    }
+  }
+  throw new Error('Replicate: agotó espera (90 s). Modelo frío, prueba ↻ Reintentar.');
+}
+
+// ---- 3) Together.ai (browser-direct, T2I, NO usa tu foto) --------------
 async function together(prompt, opts = {}) {
   const env = import.meta.env || {};
   const apiKey = env.VITE_TOGETHER_API_KEY;
@@ -90,55 +200,12 @@ async function together(prompt, opts = {}) {
   }
 
   const data = await res.json();
-  // Together devuelve { data: [{ url: '...' }] }
-  const url2 = data?.data?.[0]?.url || data?.url || (Array.isArray(data?.data) ? data.data[0] : null);
-  return typeof url2 === 'string' ? url2 : (url2?.url || '');
+  if (typeof data === 'string') return data;
+  if (Array.isArray(data?.data) && data.data[0]?.url) return data.data[0].url;
+  return data?.url || (Array.isArray(data?.data) ? data.data[0] : null) || '';
 }
 
-// ---- 1) Hugging Face Inference (free tier) ----------------------------
-async function huggingFace(beforeDataUrl, prompt, opts = {}) {
-  const env = import.meta.env || {};
-  const token = env.VITE_HUGGINGFACE_TOKEN;
-  if (!token) throw new Error('HF: VITE_HUGGINGFACE_TOKEN no definido.');
-  if (!beforeDataUrl) throw new Error('HF: requiere foto subida.');
-
-  const model = opts.model
-    || env.VITE_HUGGINGFACE_MODEL
-    || 'stabilityai/stable-diffusion-xl-base-1.0';
-
-  const base64 = beforeDataUrl.split(',')[1];
-
-  const res = await fetch(`https://api-inference.huggingface.co/models/${model}`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      inputs: {
-        image: base64,
-        prompt,
-        strength: 0.65,
-        num_inference_steps: 30,
-      },
-    }),
-  });
-
-  if (!res.ok) {
-    const txt = await res.text().catch(() => '');
-    throw new Error(`HF ${res.status}: ${txt.slice(0, 200)}`);
-  }
-
-  const blob = await res.blob();
-  return await new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload  = () => resolve(r.result);
-    r.onerror = () => reject(new Error('HF: no se pudo codificar la imagen'));
-    r.readAsDataURL(blob);
-  });
-}
-
-// ---- 2) Provider custom (Replicate, fal.ai, etc.) ---------------------
+// ---- 4) Custom provider -------------------------------------------------
 async function custom(beforeDataUrl, prompt, opts = {}) {
   const env = import.meta.env || {};
   const url   = env.VITE_IMAGE_API_URL;
@@ -169,15 +236,15 @@ async function custom(beforeDataUrl, prompt, opts = {}) {
   }
   const data = await res.json();
   return (
-    data.output?.[0]
-    || data.image
-    || data.url
-    || data.data?.[0]?.url
-    || ''
+    data.output?.[0] ||
+    data.image ||
+    data.url ||
+    data.data?.[0]?.url ||
+    ''
   );
 }
 
-// ---- 3) Pollinations (T2I, hoy capado) --------------------------------
+// ---- 5) Pollinations (T2I, tier anónimo muy capado) --------------------
 async function pollinations(prompt, opts = {}) {
   const w = opts.width  || 1024;
   const h = opts.height ||  768;
@@ -191,8 +258,7 @@ async function pollinations(prompt, opts = {}) {
   });
   const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?${params}`;
 
-  const maxAttempts = 3;
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+  for (let attempt = 0; attempt < 3; attempt++) {
     let probe;
     try {
       probe = await fetch(url, { method: 'HEAD' });
@@ -201,36 +267,27 @@ async function pollinations(prompt, opts = {}) {
       continue;
     }
     if (probe.status === 200) return url;
-
-    // 429/5xx: reintento con backoff
     if (probe.status === 429 || probe.status === 500 ||
         probe.status === 502 || probe.status === 503 || probe.status === 504) {
-      const base = 4000 * (attempt + 1);
-      const jitter = Math.random() * 2000;
-      await sleep(Math.min(18000, base + jitter));
+      await sleep(Math.min(18000, 4000 * (attempt + 1) + Math.random() * 2000));
       continue;
     }
-
-    // 4xx real (incluido 403) → no reintentamos. Lanzamos para que la
-    // cadena caiga al siguiente provider.
     const t = await probe.text().catch(() => '');
     throw new Error(`Pollinations ${probe.status}: ${t.slice(0, 200) || 'forbidden'}`);
   }
   throw new Error('Pollinations agotó reintentos.');
 }
 
-const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-
-// ---- 4) Stock curado (ÚLTIMO RECURSO) --------------------------------
-//    picsum da imágenes estables por seed. Cambiamos cada día para
-//    que no parezca la misma foto en todas las demos.
+// ---- 6) Stock curado ----------------------------------------------------
 function curatedStock() {
   const d = new Date();
   const stamp = `${d.getUTCFullYear()}${String(d.getUTCMonth()+1).padStart(2,'0')}${String(d.getUTCDate()).padStart(2,'0')}`;
   return `https://picsum.photos/seed/esvert-${stamp}/1600/1100`;
 }
 
-// ---- Dispatcher principal ---------------------------------------------
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+// ---- Dispatcher principal ----------------------------------------------
 export async function generateAfter(beforeDataUrl, opts = {}) {
   const env = import.meta.env || {};
   const prompt = opts.prompt || BASE_PROMPT;
@@ -244,37 +301,45 @@ export async function generateAfter(beforeDataUrl, opts = {}) {
       return url;
     } catch (e) {
       const kind = isNetworkError(e) ? 'CORS/red' : e.message?.slice(0, 60) ?? 'error';
-      console.warn(`[Es-Vert] HF (${kind}) — siguiente provider.`);
+      console.warn(`[Es-Vert] HF (${kind}) — siguiente.`);
     }
   }
 
-  // 2) Together.ai — funciona desde el navegador (CORS-enabled),
-  //    T2I de calidad con FLUX. Si está configurada, va antes de
-  //    Pollinations y del custom. Sin foto del usuario, solo prompt.
+  // 2) Replicate — única opción browser-direct que hace img2img de verdad.
+  if (env.VITE_REPLICATE_API_TOKEN && beforeDataUrl) {
+    try {
+      const url = await replicate(beforeDataUrl, prompt, opts);
+      lastSource = 'replicate';
+      return url;
+    } catch (e) {
+      const kind = isNetworkError(e) ? 'red' : e.message?.slice(0, 80) ?? 'error';
+      console.warn(`[Es-Vert] Replicate (${kind}) — siguiente.`);
+    }
+  }
+
+  // 3) Together.ai — T2I browser-direct (no usa tu foto)
   if (env.VITE_TOGETHER_API_KEY) {
     try {
       const url = await together(prompt, opts);
       lastSource = 'together';
       return url;
     } catch (e) {
-      const kind = isNetworkError(e) ? 'red' : e.message?.slice(0, 60) ?? 'error';
-      console.warn(`[Es-Vert] Together (${kind}) — siguiente provider.`);
+      console.warn(`[Es-Vert] Together (${e.message?.slice(0, 80)}) — siguiente.`);
     }
   }
 
-  // 2) Custom
+  // 4) Custom
   if (env.VITE_IMAGE_API_URL && env.VITE_IMAGE_API_KEY && env.VITE_IMAGE_MODEL && beforeDataUrl) {
     try {
       const url = await custom(beforeDataUrl, prompt, opts);
       lastSource = 'custom';
       return url;
     } catch (e) {
-      const kind = isNetworkError(e) ? 'CORS/red' : e.message?.slice(0, 60) ?? 'error';
-      console.warn(`[Es-Vert] custom (${kind}) — siguiente provider.`);
+      console.warn(`[Es-Vert] custom (${e.message?.slice(0, 80)}) — siguiente.`);
     }
   }
 
-  // 3) Pollinations
+  // 5) Pollinations
   try {
     const url = await pollinations(prompt, opts);
     lastSource = 'pollinations';
@@ -283,7 +348,7 @@ export async function generateAfter(beforeDataUrl, opts = {}) {
     console.warn(`[Es-Vert] Pollinations (${e.message?.slice(0, 80)}) — fallback final.`);
   }
 
-  // 4) Stock curado — siempre funciona
+  // 6) Stock curado
   lastSource = 'curated';
   console.warn('[Es-Vert] Usando stock curado como último recurso.');
   return curatedStock();
