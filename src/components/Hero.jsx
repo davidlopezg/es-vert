@@ -1,19 +1,22 @@
 import { useRef, useState } from 'react';
 
-// Estado INICIAL: titular gigante + dropzone masivo.
-// Soporta drag&drop real Y selección de archivo (que se usará como
-// "antes" en el slider de Result). El botón "Probar demo" salta
-// directamente al estado Result con los mocks.
+// Hero estado INICIAL — grid 50/50 con cabecera + dropzone card.
+// La card derecha usa el truco del brief: rounded-tl asimétrico
+// (solo esquina superior izquierda, las otras tres rectas).
+// Todo el "relleno editorial" se queda como crédito editorial:
+// masthead superior, strip tipográfico, subtítulo en cursiva suave.
+
+const TRUST_STRIP =
+  'Diseño 3D · Montaje profesional · Presupuesto real · Sin compromiso';
 
 export default function Hero({ onDemo, onFile }) {
   const [drag, setDrag] = useState(false);
-  const [phase, setPhase] = useState('idle'); // 'idle' | 'reading' | 'done'
+  const [phase, setPhase] = useState('idle'); // 'idle' | 'reading'
   const inputRef = useRef(null);
 
   const handleFile = (file) => {
     if (!file || !file.type?.startsWith('image/')) return;
     setPhase('reading');
-    // Pequeño delay para que se vea el estado de carga.
     setTimeout(() => {
       onFile(file);
       setPhase('done');
@@ -21,97 +24,108 @@ export default function Hero({ onDemo, onFile }) {
   };
 
   return (
-    <section className="flex-1 flex flex-col">
-      {/* --- Bloque titular --------------------------------------------- */}
-      <div className="px-5 md:px-12 pt-8 md:pt-14 pb-6 md:pb-10 border-b border-ink">
-        <div className="flex items-center gap-4 mb-6 md:mb-10">
-          <span className="mono text-[10px] uppercase tracking-[0.28em]">Edición N° 001</span>
-          <span className="h-px flex-1 bg-ink"></span>
-          <span className="mono text-[10px] uppercase tracking-[0.28em]">Verano 2025</span>
+    <section className="flex-1 grid grid-cols-1 lg:grid-cols-2 min-h-0">
+      {/* ── Columna izquierda: titular + subtítulo + crédito ───────── */}
+      <div className="flex flex-col justify-between p-6 md:p-10 lg:p-12 xl:p-16 border-b lg:border-b-0 lg:border-r border-ink/10 min-h-[420px]">
+        {/* Masthead */}
+        <div className="flex items-baseline gap-3">
+          <span className="text-[11px] uppercase tracking-[0.25em] text-mute">
+            Estudio
+          </span>
+          <span className="h-px flex-1 bg-ink/15"></span>
+          <span className="text-[11px] uppercase tracking-[0.25em] text-mute">
+            Est. 2018 · Barcelona
+          </span>
         </div>
 
-        <h1 className="font-serif leading-[0.9] tracking-[-0.045em] text-[16vw] md:text-[12rem] lg:text-[14rem] font-light">
-          <span className="block">TU TERRAZA,</span>
-          <span className="block">
-            <em className="italic font-normal">REDISEÑADA.</em>
-          </span>
+        {/* Titular */}
+        <h1 className="font-sans tracking-[-0.035em] leading-[0.92] text-[16vw] md:text-[7rem] xl:text-[8.5rem] mt-12 lg:mt-0">
+          <span className="block font-extralight text-ink">Tu terraza,</span>
+          <span className="block italic font-medium">rediseñada.</span>
         </h1>
-      </div>
 
-      {/* --- Rejilla 4 + 8 --------------------------------------------- */}
-      <div className="grid grid-cols-1 md:grid-cols-12 flex-1 min-h-0">
-        {/* Columna izquierda: subtítulo */}
-        <div className="md:col-span-4 p-5 md:p-10 lg:p-12 border-b md:border-b-0 md:border-r border-ink flex flex-col justify-between min-h-[180px]">
-          <p className="font-serif text-2xl md:text-3xl lg:text-[2rem] leading-[1.05] max-w-sm">
-            La IA no inventa: diseña con <em className="italic">productos reales</em> que puedes comprar.
+        {/* Subtítulo + crédito de credibilidad */}
+        <div className="mt-10 lg:mt-14 max-w-xl">
+          <p className="font-sans text-lg md:text-xl text-ink/85 leading-[1.45]">
+            Tú decides el diseño y nosotros hacemos todo lo demás.
           </p>
-          <div className="mt-8 md:mt-12">
-            <p className="mono text-[10px] uppercase tracking-[0.22em] leading-[1.6] opacity-70">
-              Mira cómo puede quedar tu espacio y descubre cuánto cuesta.<br />
-              Presupuesto calculado a partir de productos y precios reales.
+          <div className="mt-8 pt-6 border-t border-ink/15">
+            <p className="text-[10px] md:text-[11px] uppercase tracking-[0.28em] text-mute">
+              {TRUST_STRIP}
             </p>
           </div>
         </div>
+      </div>
 
-        {/* Columna derecha: dropzone */}
-        <div
-          onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
-          onDragLeave={() => setDrag(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setDrag(false);
-            const file = e.dataTransfer.files?.[0];
-            handleFile(file);
-          }}
-          className={`md:col-span-8 relative transition-colors duration-150 ${
-            drag ? 'bg-ink text-paper' : 'bg-paper text-ink'
-          }`}
-        >
-          <div className="absolute inset-4 md:inset-8 border border-dashed border-current flex flex-col items-center justify-center text-center p-6 md:p-12">
-            <input
-              ref={inputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => handleFile(e.target.files?.[0])}
-            />
-
-            <span className="mono text-[10px] uppercase tracking-[0.32em] mb-4 opacity-70">
-              {phase === 'reading' ? '· Cargando ·'
-                : drag ? '· Suelta aquí ·'
-                : '· Paso 01 · Sube una foto ·'}
-            </span>
-
-            <h2 className="font-serif text-3xl md:text-5xl lg:text-6xl leading-[1.05] tracking-tight max-w-3xl">
-              {phase === 'reading'
-                ? <>Detectando productos<br /><em className="italic">compatibles…</em></>
-                : <>Arrastra una foto de<br /><em className="italic">tu terraza</em> al cuadrado.</>
-              }
-            </h2>
-
-            <div className="mt-8 md:mt-12 flex flex-col sm:flex-row items-center gap-3 sm:gap-5">
-              <button
-                type="button"
-                onClick={() => inputRef.current?.click()}
-                disabled={phase === 'reading'}
-                className="mono text-[11px] uppercase tracking-[0.25em] border border-current px-5 py-3 hover:bg-current hover:text-paper transition-colors disabled:opacity-40"
-              >
-                Seleccionar archivo
-              </button>
-              <span className="mono text-[10px] uppercase tracking-[0.22em] opacity-50">o</span>
-              <button
-                type="button"
-                onClick={onDemo}
-                disabled={phase === 'reading'}
-                className="mono text-[11px] uppercase tracking-[0.25em] underline underline-offset-4 hover:no-underline disabled:opacity-40"
-              >
-                Probar demo →
-              </button>
-            </div>
-
-            <p className="mono text-[10px] uppercase tracking-[0.25em] mt-6 md:mt-10 opacity-50">
-              jpg · png · heic · máx 20 MB
+      {/* ── Columna derecha: tarjeta blanca con dropzone ──────────── */}
+      <div className="bg-cream p-6 md:p-10 lg:p-12 xl:p-16 flex items-center">
+        <div className="w-full bg-white border border-ink/10 radius-tl-asim md:radius-tl-asim-md overflow-hidden">
+          {/* Cabecera de la card */}
+          <div className="px-6 md:px-8 pt-6 md:pt-8 pb-4">
+            <p className="text-[11px] uppercase tracking-[0.25em] text-accent mb-3">
+              Paso 01 · Tu foto
             </p>
+            <h2 className="font-sans font-extralight text-2xl md:text-[1.85rem] leading-[1.1] tracking-tight">
+              Empieza por aquí.<br />
+              <span className="text-ink/65">
+                Sube una foto y mira el resultado en segundos.
+              </span>
+            </h2>
+          </div>
+
+          {/* Dropzone */}
+          <div className="px-6 md:px-8 pb-6 md:pb-8">
+            <div
+              onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
+              onDragLeave={() => setDrag(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDrag(false);
+                handleFile(e.dataTransfer.files?.[0]);
+              }}
+              className={`border-2 border-dashed p-6 md:p-8 text-center transition-colors ${
+                drag
+                  ? 'border-accent bg-accent/[0.04]'
+                  : 'border-ink/25 bg-cream/50'
+              }`}
+            >
+              <input
+                ref={inputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => handleFile(e.target.files?.[0])}
+              />
+              <p className="font-sans text-ink/80 text-base md:text-lg mb-5">
+                {drag
+                  ? 'Suelta aquí ↓'
+                  : phase === 'reading'
+                  ? 'Detectando productos compatibles…'
+                  : 'Arrastra una foto de tu terraza'}
+              </p>
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-5">
+                <button
+                  type="button"
+                  onClick={() => inputRef.current?.click()}
+                  disabled={phase === 'reading'}
+                  className="border border-ink/40 text-ink px-5 py-3 text-[12px] uppercase tracking-[0.22em] hover:bg-ink hover:text-cream transition-colors disabled:opacity-40"
+                >
+                  Seleccionar archivo
+                </button>
+                <span className="text-[11px] uppercase tracking-[0.22em] text-mute">o</span>
+                <button
+                  type="button"
+                  onClick={onDemo}
+                  disabled={phase === 'reading'}
+                  className="text-[12px] uppercase tracking-[0.22em] text-ink underline underline-offset-4 hover:no-underline disabled:opacity-40"
+                >
+                  Probar demo →
+                </button>
+              </div>
+              <p className="mt-5 text-[10px] uppercase tracking-[0.25em] text-mute">
+                jpg · png · heic · máx 20 MB
+              </p>
+            </div>
           </div>
         </div>
       </div>

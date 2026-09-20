@@ -97,12 +97,31 @@ Para desactivar la imagen a través del proxy (recomendado casi siempre NO): `VI
 
 `vite.config.js` lleva `base: '/es-vert/'` por defecto. Cámbialo a `'/'` si lo mueves a dominio propio.
 
-## Decisiones de diseño
+## Sistema de diseño (0.2.0)
 
-- **Paleta única** `ink` (#000) y `paper` (#FFF). El color lo traen solo las fotografías.
-- **Cero border-radius**. Bordes rectos en todos los componentes, líneas hairline (1 px) como separadores.
-- **Tipografía dual**: serif para los titulares y dot-leaders, mono para todo dato técnico.
-- **Producto = landing**. Sin menú, sin secciones estándar, sin onboarding.
+| Token | Valor | Uso |
+|---|---|---|
+| `cream` | `#F6F6F6` | Fondo principal |
+| `ink` | `#1A1A1A` | Texto, líneas, contraste |
+| `accent` | `#53A548` | Verde corporativo · CTA primario, "vert" del logo |
+| `taupe` | `#8D8375` | Banda superior, separadores cálidos |
+| `mute` | `#666666` | Texto secundario, "ÉS" del logo |
+
+### Tipografía
+Única familia: **Montserrat** (Light / Regular / Medium / Italic). Precios alineados con `tabular-nums`, sin mono. Etiquetas en `uppercase tracking-[0.22em]`.
+
+### Reglas visuales
+- **Asimetría `radius-tl-asim` / `radius-tl-asim-md`** (60 px / 100 px) en tarjetas y slider — la firma del estudio.
+- **Botones ghost**: solo borde fino `border-ink/30` + hover invertido.
+- **CTA primario**: `bg-accent` (verde), reservado al botón "Enviar" del prompt.
+- **Cero sombras difuminadas**, solo hairlines (`border-ink/10`, `border-ink/15`).
+- **Una sola idea por zona**: cada bloque hace una cosa y no acumula mecanismos.
+
+## Decisiones de producto
+
+- **Producto + servicio, no herramienta pura**: la empresa ya hace 3D y montaje, esta herramienta es un paso más.
+- **Honestidad de borrador**: el recibo deja claro que es un *draft* validado en visita técnica.
+- **Single-screen PLG**: una sola página con dos estados (`hero` ↔ `result`), sin secciones "Cómo funciona" / "Precios".
 
 ## Documentos del proyecto
 

@@ -10,14 +10,15 @@
     -webkit-text-size-adjust: 100%;
   }
   body {
-    @apply bg-paper text-ink font-serif antialiased;
+    @apply bg-cream text-ink font-sans antialiased;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: 'kern' 1, 'liga' 1;
   }
   ::selection {
-    background: #000;
-    color: #fff;
+    background: #53A548;
+    color: #F6F6F6;
   }
   button {
     -webkit-tap-highlight-color: transparent;
@@ -31,5 +32,8 @@
 
 @layer utilities {
   .tabular-nums { font-variant-numeric: tabular-nums; }
-  .border-hair { border-width: 1px; }
+  /* Curvas asimétricas: solo esquina superior-izquierda.
+     Truco de diseño corporativo — el resto de esquinas quedan rectas. */
+  .radius-tl-asim    { border-top-left-radius: 60px; }
+  .radius-tl-asim-md { border-top-left-radius: 100px; }
 }

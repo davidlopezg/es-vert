@@ -130,8 +130,8 @@ export default function App() {
           />
         )}
       </main>
-      <footer className="border-t border-ink px-4 py-2.5 mono text-[10px] uppercase tracking-[0.18em] flex flex-wrap gap-x-6 gap-y-1 justify-between">
-        <span>Es-Vert · Demo · {new Date().getFullYear()}</span>
+      <footer className="border-t border-ink/10 px-4 md:px-8 py-3 font-sans text-[10px] uppercase tracking-[0.22em] text-mute flex flex-wrap gap-x-6 gap-y-1 justify-between">
+        <span>Es-Vert SL · {new Date().getFullYear()}</span>
         <span>
           {AI_CFG.enabled
             ? `Conectado · ${LLM_LABEL} · ${AI_CFG.mode}`

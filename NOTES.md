@@ -5,6 +5,36 @@ Se complementa con `CHANGELOG.md` (que solo lleva releases fechados).
 
 ---
 
+## 2025 · Sesión de refresco visual
+
+### Radiografía de marca
+El usuario pidió alinear el producto con la estética del sitio madre: off-white, verde corporativo, tipografía sans geométrica, **botones ghost** y, sobre todo, la curva **asimétrica `rounded-tl-…`** en imágenes. Esa asimetría es "el detalle de diseño más destacable" — la firma del estudio.
+
+### Posicionamiento confirmado
+La empresa **ya hace hoy** diseño 3D y montaje físico. Esta herramienta es "un paso más" sobre ese servicio. Eso obliga a la landing a ser:
+- producto + servicio a la vez (no herramienta pura),
+- honesta con el borrador (es un *draft*, se valida en visita),
+- puente al funnel manual al final (no una sección "Contacto" completa, sí un mini-CTA).
+
+### Cambio de claim
+Mi propuesta inicial ("Empezar mi proyecto →") y la corporativa ("Diseño 3D · Montaje · Presupuesto · Sin compromiso") se rechazaron por ambos lados: demasiado SaaS. El usuario aporta la frase final: **«Tú decides el diseño y nosotros hacemos todo lo demás.»** — sentido editorial, tono boutique.
+
+### Norma de diseño adoptada
+> «Una sola idea por zona, sin más mecanismos de los necesarios.»
+
+Aplicada a:
+- Subtítulo = la frase del usuario. Sin más.
+- Strip = crédito de revista bajo el subtítulo (mute, hairline), no banner.
+- Botones = los que el dropzone necesita (file + demo), nada más.
+- Recibo = el disclaimer honesto y un mini-CTA al pie, sin nueva sección.
+
+### Pendiente
+- [ ] Si se publica en abierto, decidir si el mini-CTA apunta a `mailto`, formulario o Calendly.
+- [ ] Sustituir el placeholder `Est. 2018` por la fecha real del estudio.
+- [ ] Cuando el usuario apruebe el look & feel, validación cruzada en mobile real (no solo simulación mental).
+
+---
+
 ## 2025 · Sesión inicial
 
 ### Contexto
