@@ -130,7 +130,7 @@ export default function App() {
           />
         )}
       </main>
-      <footer className="border-t border-ink/10 px-4 md:px-8 py-3 font-sans text-[10px] uppercase tracking-[0.22em] text-mute flex flex-wrap gap-x-6 gap-y-1 justify-between">
+      <footer className="border-t border-ink/10 px-5 md:px-10 py-3 font-mono text-[10px] uppercase tracking-[0.22em] text-mute flex flex-wrap gap-x-6 gap-y-1 justify-between">
         <span>Es-Vert SL · {new Date().getFullYear()}</span>
         <span>
           {AI_CFG.enabled

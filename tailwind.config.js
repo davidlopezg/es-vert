@@ -4,15 +4,11 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Montserrat', 'Inter', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
+        // Triada tipográfica — cada voz con un trabajo distinto.
+        sans:   ['Inter', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
+        serif:  ['Fraunces', 'Georgia', 'Cambria', 'serif'],
+        mono:   ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
       },
-      // Paleta corporativa És-Vert (radiografía visual 2025-09)
-      //   cream  #F6F6F6 → fondo
-      //   ink    #1A1A1A → texto principal
-      //   accent #53A548 → verde corporativo (CTAs, "vert")
-      //   taupe  #8D8375 → barra superior, separadores cálidos
-      //   mute   #666666 → texto secundario / "ÉS"
-      // Sintaxis con <alpha-value> para soportar /10, /30, /90...
       colors: {
         cream:  'rgb(246 246 246 / <alpha-value>)',
         ink:    'rgb(26 26 26 / <alpha-value>)',

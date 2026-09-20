@@ -1,9 +1,8 @@
 import { eur } from '../data/products.js';
 
-// Recibo editorial modernizado: serif fuera, sin mono, todo Montserrat.
-// Dot-leaders y separadores con hairline para reducir peso visual.
-// Disclaimer reescrito (honesto sobre el borrador IA + visita técnica).
-// Mini-CTA discreto al pie, sin sección propia.
+// Recibo editorial: tipografía triada — Inter para los nombres,
+// JetBrains Mono para las cifras y los SKU, Fraunces (serif italic)
+// para el total que cierra la composición.
 
 function fmt(n) {
   return eur.format(n) + ' €';
@@ -16,7 +15,7 @@ function Row({ line }) {
         <h3 className="font-sans text-[15px] md:text-base leading-snug text-ink">
           {line.name}
         </h3>
-        <span className="font-sans text-[10px] uppercase tracking-[0.22em] text-mute tabular-nums whitespace-nowrap">
+        <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-mute tabular-nums whitespace-nowrap">
           {line.qty}×
         </span>
       </div>
@@ -25,7 +24,7 @@ function Row({ line }) {
           className="flex-1 border-b border-dotted border-ink/30 translate-y-[-3px]"
           aria-hidden="true"
         ></span>
-        <span className="font-sans text-sm tabular-nums text-ink">
+        <span className="font-mono text-sm tabular-nums text-ink">
           {fmt(line.price * line.qty)}
         </span>
       </div>
@@ -39,10 +38,10 @@ export default function Receipt({ lines }) {
   return (
     <div className="flex flex-col min-h-0">
       <header className="px-5 md:px-6 pt-6 pb-5 border-b border-ink/15">
-        <p className="font-sans text-[10px] uppercase tracking-[0.25em] text-mute mb-2">
+        <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-mute mb-2">
           Recibo · 001 · Borrador
         </p>
-        <h2 className="font-sans font-light text-2xl md:text-[1.7rem] leading-[1.1] tracking-tight">
+        <h2 className="font-serif font-light text-2xl md:text-[1.7rem] leading-[1.05] tracking-tight">
           Presupuesto<br />
           <em className="italic font-medium">base estimado</em>
         </h2>
@@ -50,7 +49,7 @@ export default function Receipt({ lines }) {
 
       {lines.length === 0 ? (
         <div className="flex-1 flex items-center justify-center px-6 py-10">
-          <p className="font-sans italic text-center text-mute text-sm">
+          <p className="font-serif italic text-center text-mute text-sm">
             Recibo vacío.<br />Pide un cambio para empezar.
           </p>
         </div>
@@ -61,16 +60,16 @@ export default function Receipt({ lines }) {
       )}
 
       <div className="mt-auto border-t border-ink px-5 md:px-6 py-6">
-        <div className="flex items-baseline justify-between">
-          <span className="font-sans text-[10px] uppercase tracking-[0.28em] text-mute">
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-mute">
             Total estimado
           </span>
-          <span className="font-sans font-medium text-3xl md:text-4xl tabular-nums">
+          <span className="font-serif font-medium text-3xl md:text-[2.5rem] tracking-tight tabular-nums leading-none">
             {fmt(subtotal)}
           </span>
         </div>
 
-        <p className="mt-5 font-sans italic text-[11px] md:text-xs leading-[1.55] text-mute">
+        <p className="mt-5 font-serif italic text-[11px] md:text-xs leading-[1.55] text-mute">
           *Borrador generado por IA. Sujeto a validación y visita técnica.
           Precios orientativos basados en catálogo público; el precio final
           se cierra tras la visita.*
@@ -79,7 +78,7 @@ export default function Receipt({ lines }) {
         <div className="mt-5 pt-5 border-t border-ink/10">
           <button
             type="button"
-            className="font-sans text-[11px] uppercase tracking-[0.25em] text-ink underline underline-offset-4 hover:no-underline"
+            className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink underline underline-offset-4 hover:no-underline btn-lift"
           >
             Reservar visita técnica →
           </button>
