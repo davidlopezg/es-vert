@@ -136,13 +136,24 @@ export default function BeforeAfterSlider({
             </span>
           )}
           {!regenerating && afterFailed && onRetry && (
-            <button
-              type="button"
-              onClick={onRetry}
-              className="font-sans text-[10px] uppercase tracking-[0.22em] bg-cream text-ink border border-ink/40 px-3 py-1.5 hover:bg-ink hover:text-cream transition-colors"
-            >
-              ↻ Reintentar render
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={onRetry}
+                className="font-sans text-[10px] uppercase tracking-[0.22em] bg-cream text-ink border border-ink/40 px-3 py-1.5 hover:bg-ink hover:text-cream transition-colors"
+              >
+                ↻ Reintentar
+              </button>
+              <a
+                href={after}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-sans text-[10px] uppercase tracking-[0.22em] bg-cream text-mute border border-ink/30 px-3 py-1.5 hover:text-ink transition-colors"
+                title="Abre la URL de la IA en una pestaña nueva para diagnosticar"
+              >
+                ↗ Ver URL
+              </a>
+            </div>
           )}
           {!regenerating && !afterFailed && (
             <span className="font-sans text-[10px] uppercase tracking-[0.22em] bg-cream/95 text-mute px-3 py-1.5">
