@@ -1,8 +1,8 @@
 import { eur } from '../data/products.js';
 
-// Recibo editorial denso: cada línea muestra nombre, desglose
-// (qty × unit) y subtotal en dos filas. Total en serif grande
-// debajo. Disclaimer honesto + mini-CTA al pie, todo sin aire vacío.
+// Recibo editorial: cada línea muestra índice + nombre + subtotal,
+// luego desglose (qty × unit). Total en serif Fraunces grande.
+// Footer cierra con dos CTAs: visita técnica y descarga PDF.
 
 function fmt(n) {
   return eur.format(n) + ' €';
@@ -34,13 +34,12 @@ function Row({ line, idx }) {
   );
 }
 
-export default function Receipt({ lines }) {
+export default function Receipt({ lines, onReservar }) {
   const subtotal = lines.reduce((s, l) => s + l.price * l.qty, 0);
   const qtyTotal = lines.reduce((s, l) => s + l.qty, 0);
 
   return (
     <div className="flex flex-col min-h-0">
-      {/* Cabecera del recibo */}
       <header className="px-5 pt-5 pb-3 border-b border-ink/15">
         <div className="flex items-baseline justify-between mb-2">
           <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-mute">
@@ -56,11 +55,13 @@ export default function Receipt({ lines }) {
         </h2>
       </header>
 
-      {/* Lista densa */}
       {lines.length === 0 ? (
         <div className="flex-1 flex items-center justify-center px-6 py-10">
-          <p className="font-serif italic text-center text-mute text-sm">
-            Recibo vacío.<br />Pide un cambio para empezar.
+          <p className="font-serif text-center text-mute text-sm">
+            Recibo vacío.<br />
+            <span className="font-mono text-[11px] uppercase tracking-[0.22em] block mt-2">
+              Pide un cambio para empezar
+            </span>
           </p>
         </div>
       ) : (
@@ -69,9 +70,7 @@ export default function Receipt({ lines }) {
         </ul>
       )}
 
-      {/* Footer: total + disclaimer + CTA */}
       <div className="mt-auto border-t border-ink px-5 py-5 space-y-4">
-        {/* Mini-stats y total */}
         <div className="flex items-baseline justify-between font-mono text-[10px] uppercase tracking-[0.25em] text-mute">
           <span>{qtyTotal} unidades en {lines.length} líneas</span>
           <span>Subtotal</span>
@@ -85,22 +84,32 @@ export default function Receipt({ lines }) {
           </span>
         </div>
 
-        <p className="font-serif italic text-[11px] leading-[1.55] text-mute">
-          *Borrador generado por IA. Sujeto a validación y visita técnica.
+        <p className="font-sans text-[11px] leading-[1.55] text-mute">
+          Borrador generado por IA. Sujeto a validación y visita técnica.
           Precios orientativos basados en catálogo público; el precio final
-          se cierra tras la visita.*
+          se cierra tras la visita.
         </p>
+      </div>
 
-        <div className="pt-3 border-t border-ink/10 flex items-center justify-between">
+      {/* CTA final del recibo */}
+      <div className="px-5 pb-5 -mt-1">
+        <button
+          type="button"
+          onClick={onReservar}
+          className="w-full bg-accent hover:bg-accent/90 text-cream px-6 py-4 font-mono text-[12px] uppercase tracking-[0.18em] font-medium btn-lift"
+        >
+          Obtener mi diseño y presupuesto personalizado →
+        </button>
+        <div className="flex items-center justify-between mt-3 font-mono text-[10px] uppercase tracking-[0.25em] text-mute">
           <button
             type="button"
-            className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink underline underline-offset-4 hover:no-underline btn-lift"
+            className="hover:text-ink transition-colors btn-lift"
           >
-            Reservar visita técnica →
+            Reservar visita técnica
           </button>
           <button
             type="button"
-            className="font-mono text-[11px] uppercase tracking-[0.25em] text-mute hover:text-ink btn-lift"
+            className="hover:text-ink transition-colors btn-lift"
             aria-label="Exportar presupuesto"
           >
             ↓ PDF

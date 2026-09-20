@@ -14,6 +14,7 @@ export default function Result({
   beforeSrc,
   afterSrc,
   onReset,
+  onReservar,
 }) {
   return (
     <section className="flex-1 grid grid-cols-1 md:grid-cols-10 min-h-0 border-t border-ink/10">
@@ -25,7 +26,7 @@ export default function Result({
       </div>
 
       <aside className="md:col-span-3 flex flex-col min-h-0">
-        <Receipt lines={lines} />
+        <Receipt lines={lines} onReservar={onReservar} />
         <Prompt onSubmit={onPrompt} messages={messages} pending={pending} />
       </aside>
     </section>
