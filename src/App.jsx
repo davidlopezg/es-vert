@@ -4,6 +4,7 @@ import Menu from './components/Menu.jsx';
 import Hero from './components/Hero.jsx';
 import Result from './components/Result.jsx';
 import Footer from './components/Footer.jsx';
+import DiagnosticPill from './components/DiagnosticPill.jsx';
 import { INITIAL_PRODUCTS } from './data/products.js';
 import { mockRefine } from './lib/matchAndRespond.js';
 import { callMinimax, getAIConfig } from './lib/minimax.js';
@@ -220,6 +221,8 @@ export default function App() {
       </main>
 
       <Footer status={FOOTER_STATUS} />
+
+      <DiagnosticPill />
 
       <Menu open={menuOpen} onClose={() => setMenuOpen(false)} />
     </div>
