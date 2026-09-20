@@ -2,8 +2,9 @@
 // Adapter de generación de imagen · tres niveles de calidad.
 // =============================================================
 //  1. Pollinations  →  cero-config, gratis, sin signup. T2I.
+//                       Limitado por IP (1 cola, tier anónimo).
 //  2. HuggingFace  →  free tier, SDXL, image-to-image real.
-//  3. Custom       →  Replicate / fal.ai / Stability, lo que tengas.
+//  3. Custom       →  Replicate / fal.ai / Stability.
 
 const BASE_PROMPT = [
   'Photorealistic contemporary Mediterranean terrace redesign',
@@ -14,10 +15,6 @@ const BASE_PROMPT = [
   'sharp focus, magazine quality, ultra detailed',
 ].join(', ');
 
-// Construye el prompt para el "después" incorporando el set actual
-// de SKUs. Cuando el usuario añade una maceta, el prompt la nombra
-// explícitamente. No garantiza pixel-perfect (la generación visual
-// tiene su latencia), pero sesga el resultado hacia los productos.
 export function buildImagePrompt(lines) {
   if (!lines || lines.length === 0) return BASE_PROMPT;
   const items = lines
@@ -32,19 +29,59 @@ export function buildImagePrompt(lines) {
 }
 
 // ---- 1) Pollinations (default, sin credenciales) ----------------------
-function pollinationsUrl(prompt, opts = {}) {
-  const w = opts.width  || 1600;
-  const h = opts.height || 1100;
+//    Tier anónimo = 1 request en cola por IP. Si la cola está
+//    ocupada, el servidor responde 429/500 con JSON de error.
+//    Solución: HEAD para detectar el estado antes de asignar la URL,
+//    retry con backoff si está saturado.
+async function pollinations(prompt, opts = {}) {
+  const w = opts.width  || 1024;   // 1600 saturaba la cola, bajamos
+  const h = opts.height ||  768;
   const seed = opts.seed ?? Math.floor(Math.random() * 1e9);
   const params = new URLSearchParams({
+    model: 'flux',                 // explícito: evita Sana (más caro)
     width: String(w),
     height: String(h),
     seed: String(seed),
     nologo: 'true',
-    enhance: 'true',
+    // enhance:false → Pollinations va directo al modelo base, no Sana
   });
-  return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?${params}`;
+  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?${params}`;
+
+  const maxAttempts = 4;
+  let lastErr;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    let probe;
+    try {
+      probe = await fetch(url, { method: 'HEAD' });
+    } catch (e) {
+      // network error → reintentar
+      lastErr = e;
+      await sleep(3000);
+      continue;
+    }
+
+    if (probe.status === 200) return url;
+
+    if (probe.status === 429 || probe.status === 500 ||
+        probe.status === 502 || probe.status === 503 || probe.status === 504) {
+      // Cola llena o servidor saturado → backoff progresivo.
+      const base = 4000 * (attempt + 1);
+      const jitter = Math.random() * 2000;
+      const wait = Math.min(20000, base + jitter);
+      lastErr = new Error(`Pollinations ${probe.status}, reintento ${attempt + 1}/${maxAttempts}`);
+      await sleep(wait);
+      continue;
+    }
+
+    // Otro error HTTP (4xx real): no reintentar, mostrar.
+    const t = await probe.text().catch(() => '');
+    throw new Error(`Pollinations ${probe.status}: ${t.slice(0, 200)}`);
+  }
+
+  throw lastErr || new Error('Pollinations agotó reintentos (rate-limit). Prueba HF u otro provider.');
 }
+
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 // ---- 2) Hugging Face Inference (free tier) ----------------------------
 async function huggingFace(beforeDataUrl, prompt, opts = {}) {
@@ -139,7 +176,7 @@ export async function generateAfter(beforeDataUrl, opts = {}) {
   if (env.VITE_IMAGE_API_URL && env.VITE_IMAGE_API_KEY && env.VITE_IMAGE_MODEL && beforeDataUrl) {
     return custom(beforeDataUrl, prompt, opts);
   }
-  return pollinationsUrl(prompt, opts);
+  return pollinations(prompt, opts);
 }
 
 export { BASE_PROMPT as DEFAULT_PROMPT };

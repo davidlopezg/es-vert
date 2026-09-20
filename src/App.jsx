@@ -53,7 +53,8 @@ export default function App() {
   const [beforeSrc, setBeforeSrc] = useState(null);
   const [afterSrc, setAfterSrc] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const regenIdRef = useRef(0);   // token para descartar generaciones obsoletas
+  const regenIdRef = useRef(0);   // descarta generaciones obsoletas
+  const inflightIdRef = useRef(0); // single-flight: si hay dos clics, solo vale el último
 
   const goHome = useCallback(() => setStage('home'), []);
 
@@ -64,14 +65,16 @@ export default function App() {
       const dataUrl = e.target.result;
       setBeforeSrc(dataUrl);
       setStage('detalle');
+
+      const myId = ++inflightIdRef.current;
       try {
         setPending(true);
         const url = await generateAfter(dataUrl);
-        if (url) setAfterSrc(url);
+        if (myId === inflightIdRef.current && url) setAfterSrc(url);
       } catch (err) {
-        console.warn('Generación inicial falló:', err);
+        if (myId === inflightIdRef.current) console.warn('handleFile:', err);
       } finally {
-        setPending(false);
+        if (myId === inflightIdRef.current) setPending(false);
       }
     };
     reader.readAsDataURL(file);
@@ -79,14 +82,15 @@ export default function App() {
 
   const handleDemo = useCallback(async () => {
     setStage('detalle');
+    const myId = ++inflightIdRef.current;
     try {
       setPending(true);
       const url = await generateAfter(null);
-      if (url) setAfterSrc(url);
+      if (myId === inflightIdRef.current && url) setAfterSrc(url);
     } catch (err) {
-      console.warn('Demo:', err);
+      if (myId === inflightIdRef.current) console.warn('handleDemo:', err);
     } finally {
-      setPending(false);
+      if (myId === inflightIdRef.current) setPending(false);
     }
   }, []);
 
